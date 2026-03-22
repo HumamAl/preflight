@@ -1,6 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-7C3AED)](https://docs.anthropic.com/en/docs/claude-code)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/HumamAI/preflight/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/HumamAl/preflight/releases)
 
 # /preflight
 
@@ -75,7 +75,7 @@ These tools are complementary. /preflight catches AI-specific bugs locally befor
 ## Install
 
 ```bash
-claude plugin install github:HumamAI/preflight
+claude plugin install github:HumamAl/preflight
 ```
 
 That is it. No config files, no CI setup, no API keys. The plugin activates immediately on your next Claude Code session.

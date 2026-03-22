@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Pre-commit AI code verifier -- catches hallucinated APIs, phantom packages, and plausible-but-wrong logic before they hit your git history",
   "author": {
-    "name": "HumamAI"
+    "name": "HumamAl"
   },
   "license": "MIT",
   "keywords": [
