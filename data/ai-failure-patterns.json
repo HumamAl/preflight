@@ -1,0 +1,3029 @@
+{
+  "$schema": "https://preflight.dev/schemas/ai-failure-patterns-v1.json",
+  "version": "1.0.0",
+  "generated": "2026-03-22",
+  "description": "Comprehensive database of known AI code generation failure patterns. Used by the /preflight plugin to detect hallucinated packages, non-existent APIs, plausible-but-wrong logic, deprecated patterns, unsafe type assertions, and missing error handling.",
+  "severity_levels": {
+    "critical": {
+      "value": 4,
+      "label": "Critical",
+      "description": "Will cause build failure, runtime crash, or security vulnerability. Must be fixed before merge."
+    },
+    "high": {
+      "value": 3,
+      "label": "High",
+      "description": "Will cause incorrect behavior or subtle bugs that are hard to detect in review. Should be fixed before merge."
+    },
+    "medium": {
+      "value": 2,
+      "label": "Medium",
+      "description": "May cause issues in certain environments or is a maintenance concern. Should be flagged for review."
+    },
+    "low": {
+      "value": 1,
+      "label": "Low",
+      "description": "Style issue or minor concern. Informational flag."
+    }
+  },
+  "categories": [
+    {
+      "id": "PHANTOM_PACKAGE",
+      "label": "Phantom Package",
+      "description": "Packages that AI models commonly hallucinate. These packages either never existed, were renamed, or are plausible-sounding variants of real packages.",
+      "severity": "critical",
+      "why_ai_does_this": "LLMs interpolate between real package names in training data, generating plausible but non-existent variants. They also confuse old package names with current ones, or invent convenience wrappers that don't exist."
+    },
+    {
+      "id": "HALLUCINATED_API",
+      "label": "Hallucinated API",
+      "description": "API methods, properties, or function signatures that do not exist on the referenced library or built-in.",
+      "severity": "critical",
+      "why_ai_does_this": "LLMs blend APIs from different versions, different libraries, or entirely fabricate methods whose names sound correct based on the library's naming conventions."
+    },
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC",
+      "label": "Plausible Wrong Logic",
+      "description": "Code that looks correct at a glance but contains subtle logical errors that produce wrong results.",
+      "severity": "high",
+      "why_ai_does_this": "LLMs optimize for plausible-looking code rather than correct code. They frequently produce off-by-one errors, inverted conditions, and swapped arguments because the wrong version looks equally natural in context."
+    },
+    {
+      "id": "DEPRECATED_API",
+      "label": "Deprecated API",
+      "description": "APIs that existed in older versions of libraries or runtimes but have been deprecated or removed. The AI's training data contained heavy usage of these patterns.",
+      "severity": "medium",
+      "why_ai_does_this": "Training data is dominated by older code. Deprecated patterns appear far more frequently in the training corpus than their modern replacements, causing the model to prefer them."
+    },
+    {
+      "id": "CONFIDENT_WRONG_TYPES",
+      "label": "Confident Wrong Types",
+      "description": "Type assertions, casts, or generic usage that bypasses the type system without validation, hiding potential runtime errors.",
+      "severity": "high",
+      "why_ai_does_this": "When the AI encounters a type error during generation, it reaches for type assertions (as, any, !) to silence the error rather than fixing the underlying type mismatch. This is the path of least resistance in autoregressive generation."
+    },
+    {
+      "id": "MISSING_ERROR_HANDLING",
+      "label": "Missing Error Handling",
+      "description": "Code paths where errors, rejections, or edge cases are silently ignored, violating project conventions or best practices.",
+      "severity": "medium",
+      "why_ai_does_this": "LLMs generate the 'happy path' first and often fail to add error handling because the training data frequently shows examples without it, and error handling adds complexity that reduces generation fluency."
+    },
+    {
+      "id": "ASYNC_MISTAKES",
+      "label": "Async Mistakes",
+      "description": "Incorrect async/await usage, unhandled promises, race conditions, and parallelism errors that cause silent failures, data loss, or unpredictable behavior.",
+      "severity": "high",
+      "why_ai_does_this": "LLMs generate async code that looks syntactically correct but violates JavaScript's concurrency model. They treat forEach as if it respects await, forget to await calls when the return value is used downstream, and parallelize operations that have ordering dependencies because the parallel version reads more cleanly."
+    },
+    {
+      "id": "REACT_MISTAKES",
+      "label": "React Mistakes",
+      "description": "Violations of React's rules of hooks, incorrect component lifecycle patterns, and misuse of React APIs that cause infinite loops, stale data, or hydration mismatches.",
+      "severity": "high",
+      "why_ai_does_this": "LLMs generate code that appears to follow React patterns but violates the rules of hooks (conditional calls, missing dependencies) because the training data contains many examples of these mistakes in tutorials and Stack Overflow answers. The model also confuses Server Component and Client Component constraints."
+    },
+    {
+      "id": "NEXTJS_MISTAKES",
+      "label": "Next.js Mistakes",
+      "description": "Confusion between Pages Router and App Router patterns, incorrect use of Next.js-specific APIs, and version-specific breaking changes that cause build failures or runtime errors.",
+      "severity": "high",
+      "why_ai_does_this": "LLMs conflate Pages Router and App Router conventions because both are heavily represented in training data. They also lag behind Next.js version changes, especially the async request APIs introduced in Next.js 15 and the evolving Server Component model."
+    },
+    {
+      "id": "DATABASE_MISTAKES",
+      "label": "Database Mistakes",
+      "description": "N+1 queries, SQL injection, missing transactions, non-deterministic queries, and connection management errors that cause performance degradation, data corruption, or security vulnerabilities.",
+      "severity": "high",
+      "why_ai_does_this": "LLMs generate database code that works for a single request in development but fails at scale. They default to the simplest query pattern (individual queries in a loop) rather than batched or joined queries, and treat database operations as infallible single-step actions that need no transactional safety."
+    },
+    {
+      "id": "API_MISTAKES",
+      "label": "API Design Mistakes",
+      "description": "HTTP API anti-patterns including incorrect status codes, missing headers, security misconfigurations, and scalability oversights that cause integration issues and vulnerabilities.",
+      "severity": "medium",
+      "why_ai_does_this": "LLMs generate API endpoints that work in a happy-path demo but violate HTTP semantics and production best practices. They return 200 for errors because it is the simplest path, omit pagination because the training examples rarely show large datasets, and skip rate limiting because it is infrastructure-level concern that rarely appears in code samples."
+    }
+  ],
+
+  "patterns": [
+
+    {
+      "id": "PHANTOM_PACKAGE_001",
+      "category": "PHANTOM_PACKAGE",
+      "severity": "critical",
+      "description": "Hallucinated npm packages that do not exist or have been renamed",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "package_name_lookup",
+        "targets": ["package.json", "import statements", "require calls"],
+        "method": "Check each imported/required package against the npm registry. Flag any package that returns 404 or has zero downloads."
+      },
+      "heuristics": [
+        "Package name is a real package name with a suffix like -v2, -v3, -lite, -mini, -utils, -helper, -pro, -next",
+        "Package name uses @ scope that doesn't match the library's actual scope",
+        "Package was recently renamed but AI uses the old name",
+        "Package name combines two real package names"
+      ],
+      "known_hallucinations": {
+        "npm": [
+          {
+            "hallucinated": "zod-mini",
+            "real_package": "zod",
+            "notes": "Zod has no 'mini' variant. Use zod directly."
+          },
+          {
+            "hallucinated": "zod-lite",
+            "real_package": "zod",
+            "notes": "Zod has no 'lite' variant."
+          },
+          {
+            "hallucinated": "zod-utils",
+            "real_package": "zod",
+            "notes": "No official zod-utils package. Utility functions are built into zod."
+          },
+          {
+            "hallucinated": "express-validator-v2",
+            "real_package": "express-validator",
+            "notes": "express-validator does not publish version-suffixed packages."
+          },
+          {
+            "hallucinated": "react-query",
+            "real_package": "@tanstack/react-query",
+            "notes": "Renamed to @tanstack/react-query in v4. The old react-query package is deprecated."
+          },
+          {
+            "hallucinated": "lodash-utils",
+            "real_package": "lodash",
+            "notes": "No lodash-utils package exists. Use lodash or lodash-es."
+          },
+          {
+            "hallucinated": "node-fetch-v3",
+            "real_package": "node-fetch",
+            "notes": "node-fetch v3 is published under the same node-fetch name, not node-fetch-v3."
+          },
+          {
+            "hallucinated": "prisma-client",
+            "real_package": "@prisma/client",
+            "notes": "The correct scoped package is @prisma/client, not prisma-client."
+          },
+          {
+            "hallucinated": "next-auth-v5",
+            "real_package": "next-auth",
+            "notes": "next-auth v5 is published as next-auth, not next-auth-v5."
+          },
+          {
+            "hallucinated": "tailwind-merge-v2",
+            "real_package": "tailwind-merge",
+            "notes": "tailwind-merge v2 is published under the same package name."
+          },
+          {
+            "hallucinated": "axios-retry-v2",
+            "real_package": "axios-retry",
+            "notes": "No version-suffixed variant exists."
+          },
+          {
+            "hallucinated": "mongoose-v2",
+            "real_package": "mongoose",
+            "notes": "Mongoose publishes all versions under the mongoose package name."
+          },
+          {
+            "hallucinated": "moment-timezone-v2",
+            "real_package": "moment-timezone",
+            "notes": "No version-suffixed variant. Consider date-fns or luxon instead of moment."
+          },
+          {
+            "hallucinated": "react-router-v6",
+            "real_package": "react-router-dom",
+            "notes": "v6 is published as react-router-dom, not react-router-v6."
+          },
+          {
+            "hallucinated": "react-helmet",
+            "real_package": "react-helmet-async",
+            "notes": "react-helmet is unmaintained. react-helmet-async is the active fork."
+          },
+          {
+            "hallucinated": "styled-components-v6",
+            "real_package": "styled-components",
+            "notes": "No version-suffixed package exists."
+          },
+          {
+            "hallucinated": "next-router",
+            "real_package": "next/router",
+            "notes": "next/router is a built-in Next.js module, not a separate package."
+          },
+          {
+            "hallucinated": "next-image",
+            "real_package": "next/image",
+            "notes": "next/image is a built-in Next.js component, not a separate package."
+          },
+          {
+            "hallucinated": "webpack-utils",
+            "real_package": "webpack",
+            "notes": "No webpack-utils package. Webpack utilities are in webpack or separate named plugins."
+          },
+          {
+            "hallucinated": "babel-core",
+            "real_package": "@babel/core",
+            "notes": "babel-core is the Babel 6 package. Babel 7+ uses @babel/core."
+          },
+          {
+            "hallucinated": "babel-preset-env",
+            "real_package": "@babel/preset-env",
+            "notes": "Babel 7+ uses scoped packages under @babel/."
+          },
+          {
+            "hallucinated": "eslint-plugin-prettier-v2",
+            "real_package": "eslint-plugin-prettier",
+            "notes": "No version-suffixed variant."
+          },
+          {
+            "hallucinated": "graphql-tools",
+            "real_package": "@graphql-tools/schema",
+            "notes": "graphql-tools was split into scoped packages under @graphql-tools/."
+          },
+          {
+            "hallucinated": "typeorm-utils",
+            "real_package": "typeorm",
+            "notes": "No typeorm-utils package exists."
+          },
+          {
+            "hallucinated": "fastify-cors",
+            "real_package": "@fastify/cors",
+            "notes": "Fastify plugins moved to @fastify/ scope in Fastify v4."
+          },
+          {
+            "hallucinated": "fastify-helmet",
+            "real_package": "@fastify/helmet",
+            "notes": "Moved to @fastify/ scope."
+          },
+          {
+            "hallucinated": "fastify-jwt",
+            "real_package": "@fastify/jwt",
+            "notes": "Moved to @fastify/ scope."
+          },
+          {
+            "hallucinated": "fastify-swagger",
+            "real_package": "@fastify/swagger",
+            "notes": "Moved to @fastify/ scope."
+          },
+          {
+            "hallucinated": "nestjs-common",
+            "real_package": "@nestjs/common",
+            "notes": "NestJS uses @nestjs/ scoped packages."
+          },
+          {
+            "hallucinated": "nestjs-core",
+            "real_package": "@nestjs/core",
+            "notes": "NestJS uses @nestjs/ scoped packages."
+          },
+          {
+            "hallucinated": "sharp-utils",
+            "real_package": "sharp",
+            "notes": "No sharp-utils package."
+          },
+          {
+            "hallucinated": "puppeteer-core-v2",
+            "real_package": "puppeteer-core",
+            "notes": "No version-suffixed variant."
+          },
+          {
+            "hallucinated": "chalk-v5",
+            "real_package": "chalk",
+            "notes": "chalk v5 is ESM-only but published under the same name."
+          },
+          {
+            "hallucinated": "uuid-v4",
+            "real_package": "uuid",
+            "notes": "Use uuid package and import { v4 } from 'uuid'. No uuid-v4 package."
+          },
+          {
+            "hallucinated": "dotenv-safe",
+            "real_package": "dotenv",
+            "notes": "dotenv-safe does exist but is unmaintained. AI often suggests it when dotenv alone suffices."
+          },
+          {
+            "hallucinated": "crypto-utils",
+            "real_package": "crypto",
+            "notes": "Node.js built-in crypto module. No crypto-utils package needed."
+          },
+          {
+            "hallucinated": "node-cron-v2",
+            "real_package": "node-cron",
+            "notes": "No version-suffixed variant."
+          },
+          {
+            "hallucinated": "socket.io-v4",
+            "real_package": "socket.io",
+            "notes": "Published under the same name for all versions."
+          }
+        ]
+      },
+      "hallucination_name_patterns": [
+        {
+          "pattern": "^(.+)-v\\d+$",
+          "description": "Real package name with version suffix (e.g., express-v5, lodash-v4)",
+          "confidence": 0.9
+        },
+        {
+          "pattern": "^(.+)-(lite|mini|micro|nano|tiny)$",
+          "description": "Real package name with size-reduction suffix",
+          "confidence": 0.85
+        },
+        {
+          "pattern": "^(.+)-(utils|helpers|tools|common|core|base)$",
+          "description": "Real package name with utility suffix",
+          "confidence": 0.7
+        },
+        {
+          "pattern": "^(.+)-(pro|plus|extra|extended|advanced)$",
+          "description": "Real package name with premium/extended suffix",
+          "confidence": 0.85
+        },
+        {
+          "pattern": "^(.+)-(next|new|modern|latest)$",
+          "description": "Real package name with 'newer version' suffix",
+          "confidence": 0.8
+        },
+        {
+          "pattern": "^node-(.+)$",
+          "description": "Prefixing 'node-' to a built-in or well-known package",
+          "confidence": 0.5
+        }
+      ],
+      "examples": [
+        {
+          "bad": "import { z } from 'zod-mini';",
+          "good": "import { z } from 'zod';",
+          "explanation": "zod-mini does not exist. Zod is already lightweight. Use zod directly."
+        },
+        {
+          "bad": "import { useQuery } from 'react-query';",
+          "good": "import { useQuery } from '@tanstack/react-query';",
+          "explanation": "react-query was renamed to @tanstack/react-query in v4."
+        },
+        {
+          "bad": "const { PrismaClient } = require('prisma-client');",
+          "good": "const { PrismaClient } = require('@prisma/client');",
+          "explanation": "The correct package is @prisma/client (scoped package)."
+        }
+      ]
+    },
+
+    {
+      "id": "PHANTOM_PACKAGE_002",
+      "category": "PHANTOM_PACKAGE",
+      "severity": "critical",
+      "description": "Hallucinated Python packages that do not exist or have been renamed",
+      "languages": ["python"],
+      "detection_strategy": {
+        "type": "package_name_lookup",
+        "targets": ["requirements.txt", "pyproject.toml", "setup.py", "setup.cfg", "import statements"],
+        "method": "Check each imported package against PyPI. Flag any package that returns 404 or has negligible downloads."
+      },
+      "heuristics": [
+        "Package name is a real package with a -utils or -helpers suffix",
+        "Package combines two real library names",
+        "Package uses old naming convention (pre-rename)",
+        "Package sounds like a convenience wrapper that doesn't exist"
+      ],
+      "known_hallucinations": {
+        "pypi": [
+          {
+            "hallucinated": "sklearn",
+            "real_package": "scikit-learn",
+            "notes": "The import is 'import sklearn' but the pip package is scikit-learn."
+          },
+          {
+            "hallucinated": "cv2",
+            "real_package": "opencv-python",
+            "notes": "The import is 'import cv2' but the pip package is opencv-python."
+          },
+          {
+            "hallucinated": "yaml",
+            "real_package": "pyyaml",
+            "notes": "The import is 'import yaml' but the pip package is pyyaml."
+          },
+          {
+            "hallucinated": "dotenv",
+            "real_package": "python-dotenv",
+            "notes": "The import is 'from dotenv import load_dotenv' but pip package is python-dotenv."
+          },
+          {
+            "hallucinated": "flask-utils",
+            "real_package": "flask",
+            "notes": "No flask-utils package. Flask extensions use flask-* naming."
+          },
+          {
+            "hallucinated": "django-utils",
+            "real_package": "django",
+            "notes": "django.utils is a built-in module, not a separate package."
+          },
+          {
+            "hallucinated": "pandas-utils",
+            "real_package": "pandas",
+            "notes": "No pandas-utils package exists."
+          },
+          {
+            "hallucinated": "numpy-utils",
+            "real_package": "numpy",
+            "notes": "No numpy-utils package exists."
+          },
+          {
+            "hallucinated": "torch-utils",
+            "real_package": "torch",
+            "notes": "torch.utils is a built-in submodule, not a separate package."
+          },
+          {
+            "hallucinated": "tensorflow-lite",
+            "real_package": "tflite-runtime",
+            "notes": "TF Lite runtime is tflite-runtime, not tensorflow-lite."
+          },
+          {
+            "hallucinated": "fastapi-utils",
+            "real_package": "fastapi",
+            "notes": "A fastapi-utils package does exist but is often confused with fastapi's built-in utilities. Verify which is needed."
+          },
+          {
+            "hallucinated": "pydantic-v2",
+            "real_package": "pydantic",
+            "notes": "Pydantic v2 is published as pydantic. No version-suffixed variant."
+          },
+          {
+            "hallucinated": "sqlalchemy-utils-v2",
+            "real_package": "sqlalchemy-utils",
+            "notes": "No version-suffixed variant."
+          },
+          {
+            "hallucinated": "celery-utils",
+            "real_package": "celery",
+            "notes": "No celery-utils package."
+          },
+          {
+            "hallucinated": "requests-async",
+            "real_package": "httpx",
+            "notes": "requests-async was deprecated. Use httpx for async HTTP."
+          },
+          {
+            "hallucinated": "aiohttp-utils",
+            "real_package": "aiohttp",
+            "notes": "No aiohttp-utils package."
+          },
+          {
+            "hallucinated": "boto3-utils",
+            "real_package": "boto3",
+            "notes": "No boto3-utils package."
+          },
+          {
+            "hallucinated": "pytest-utils",
+            "real_package": "pytest",
+            "notes": "No pytest-utils. Pytest plugins use pytest-* naming with specific names."
+          },
+          {
+            "hallucinated": "pillow-utils",
+            "real_package": "Pillow",
+            "notes": "No pillow-utils. Pillow is the PIL fork."
+          },
+          {
+            "hallucinated": "scrapy-utils",
+            "real_package": "scrapy",
+            "notes": "No scrapy-utils package."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "bad": "pip install sklearn",
+          "good": "pip install scikit-learn",
+          "explanation": "The pip package name is scikit-learn, not sklearn. The import name differs from the package name."
+        },
+        {
+          "bad": "pip install cv2",
+          "good": "pip install opencv-python",
+          "explanation": "The pip package is opencv-python. cv2 is only the import name."
+        },
+        {
+          "bad": "pip install dotenv",
+          "good": "pip install python-dotenv",
+          "explanation": "The pip package is python-dotenv. The import name 'dotenv' differs from the package name."
+        }
+      ]
+    },
+
+    {
+      "id": "HALLUCINATED_API_001",
+      "category": "HALLUCINATED_API",
+      "severity": "critical",
+      "description": "Non-existent methods on JavaScript/TypeScript built-in objects",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "method_existence_check",
+        "targets": ["source files"],
+        "method": "Parse method calls on known types and verify against the actual API surface. Use TypeScript compiler API or a known-methods database."
+      },
+      "heuristics": [
+        "Method name sounds correct but doesn't exist on the type",
+        "Method exists on a different type (e.g., Array method used on Object)",
+        "Method is from a proposal that was never adopted",
+        "Method signature has wrong parameter order"
+      ],
+      "known_hallucinations": [
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "flatten",
+          "real_method": "flat",
+          "notes": "Array.prototype.flatten was proposed but shipped as Array.prototype.flat.",
+          "detection_regex": "\\.flatten\\("
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "flatMap",
+          "real_method": "flatMap",
+          "notes": "flatMap does exist but AI often uses wrong signature. It takes (element, index) => element, not (element) => [element].",
+          "detection_regex": null
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "last",
+          "real_method": "at(-1)",
+          "notes": "No .last property on arrays. Use .at(-1) or arr[arr.length - 1].",
+          "detection_regex": "\\.last(?![A-Za-z])"
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "first",
+          "real_method": "at(0)",
+          "notes": "No .first property on arrays. Use .at(0) or arr[0].",
+          "detection_regex": "\\.first(?![A-Za-z])"
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "compact",
+          "real_method": "filter(Boolean)",
+          "notes": "No .compact() on arrays. This is a lodash method. Use .filter(Boolean).",
+          "detection_regex": "\\.compact\\("
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "unique",
+          "real_method": "[...new Set(arr)]",
+          "notes": "No .unique() on arrays. Use [...new Set(arr)] or lodash.uniq.",
+          "detection_regex": "\\.unique\\("
+        },
+        {
+          "object": "Array.prototype",
+          "hallucinated_method": "isEmpty",
+          "real_method": "length === 0",
+          "notes": "No .isEmpty() on arrays. Check .length === 0.",
+          "detection_regex": "\\.isEmpty\\("
+        },
+        {
+          "object": "Object",
+          "hallucinated_method": "Object.map",
+          "real_method": "Object.entries().map()",
+          "notes": "Object has no static .map method. Use Object.entries(obj).map().",
+          "detection_regex": "Object\\.map\\("
+        },
+        {
+          "object": "Object",
+          "hallucinated_method": "Object.filter",
+          "real_method": "Object.fromEntries(Object.entries().filter())",
+          "notes": "Object has no static .filter method.",
+          "detection_regex": "Object\\.filter\\("
+        },
+        {
+          "object": "Object",
+          "hallucinated_method": "Object.forEach",
+          "real_method": "Object.entries().forEach()",
+          "notes": "Object has no static .forEach method.",
+          "detection_regex": "Object\\.forEach\\("
+        },
+        {
+          "object": "String.prototype",
+          "hallucinated_method": "contains",
+          "real_method": "includes",
+          "notes": "String.prototype.contains was renamed to .includes before shipping.",
+          "detection_regex": "\\.contains\\("
+        },
+        {
+          "object": "String.prototype",
+          "hallucinated_method": "capitalize",
+          "real_method": "charAt(0).toUpperCase() + slice(1)",
+          "notes": "No .capitalize() on strings. This is a Python/lodash method.",
+          "detection_regex": "\\.capitalize\\("
+        },
+        {
+          "object": "String.prototype",
+          "hallucinated_method": "reverse",
+          "real_method": "split('').reverse().join('')",
+          "notes": "No .reverse() on strings. Split to array first.",
+          "detection_regex": null
+        },
+        {
+          "object": "Promise",
+          "hallucinated_method": "Promise.delay",
+          "real_method": "new Promise(resolve => setTimeout(resolve, ms))",
+          "notes": "Promise.delay is from Bluebird, not native Promises.",
+          "detection_regex": "Promise\\.delay\\("
+        },
+        {
+          "object": "Promise",
+          "hallucinated_method": "Promise.map",
+          "real_method": "Promise.all(arr.map())",
+          "notes": "Promise.map is from Bluebird. Use Promise.all(arr.map(fn)).",
+          "detection_regex": "Promise\\.map\\("
+        },
+        {
+          "object": "Promise",
+          "hallucinated_method": "Promise.props",
+          "real_method": "Promise.all + Object.entries",
+          "notes": "Promise.props is from Bluebird, not native.",
+          "detection_regex": "Promise\\.props\\("
+        },
+        {
+          "object": "Map.prototype",
+          "hallucinated_method": "map",
+          "real_method": "[...map.entries()].map()",
+          "notes": "Map has no .map() method. Convert to array first.",
+          "detection_regex": null
+        },
+        {
+          "object": "Map.prototype",
+          "hallucinated_method": "filter",
+          "real_method": "[...map.entries()].filter()",
+          "notes": "Map has no .filter() method. Convert to array first.",
+          "detection_regex": null
+        },
+        {
+          "object": "JSON",
+          "hallucinated_method": "JSON.clone",
+          "real_method": "structuredClone() or JSON.parse(JSON.stringify())",
+          "notes": "No JSON.clone. Use structuredClone() or JSON.parse(JSON.stringify(obj)).",
+          "detection_regex": "JSON\\.clone\\("
+        },
+        {
+          "object": "Number",
+          "hallucinated_method": "Number.clamp",
+          "real_method": "Math.min(Math.max(val, min), max)",
+          "notes": "No Number.clamp or Math.clamp. Use Math.min(Math.max(val, min), max).",
+          "detection_regex": "(Number|Math)\\.clamp\\("
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const items = myArray.flatten();",
+          "good": "const items = myArray.flat();",
+          "explanation": "Array.prototype.flatten does not exist. The method was renamed to .flat() before it shipped."
+        },
+        {
+          "bad": "if (name.contains('admin')) { ... }",
+          "good": "if (name.includes('admin')) { ... }",
+          "explanation": "String.prototype.contains does not exist. Use .includes() instead."
+        },
+        {
+          "bad": "const mapped = Object.map(config, (key, val) => val.toUpperCase());",
+          "good": "const mapped = Object.fromEntries(Object.entries(config).map(([key, val]) => [key, val.toUpperCase()]));",
+          "explanation": "Object has no static .map() method. Use Object.entries() with Array.map()."
+        }
+      ]
+    },
+
+    {
+      "id": "HALLUCINATED_API_002",
+      "category": "HALLUCINATED_API",
+      "severity": "critical",
+      "description": "Non-existent or confused APIs on popular npm libraries",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "library_api_check",
+        "targets": ["source files importing known libraries"],
+        "method": "Cross-reference method calls with the library's actual TypeScript definitions or documentation."
+      },
+      "known_hallucinations": [
+        {
+          "library": "express",
+          "hallucinated": "app.listen({ port })",
+          "real_api": "app.listen(port, callback)",
+          "notes": "Express .listen takes positional args, not an options object. Fastify uses the object form.",
+          "detection_regex": "app\\.listen\\(\\s*\\{"
+        },
+        {
+          "library": "express",
+          "hallucinated": "res.json({ status: 200 })",
+          "real_api": "res.status(200).json(data)",
+          "notes": "res.json sends the body. Use res.status() to set status code separately.",
+          "detection_regex": null
+        },
+        {
+          "library": "express",
+          "hallucinated": "req.body (without body parser)",
+          "real_api": "express.json() middleware required",
+          "notes": "AI often forgets that req.body requires express.json() or body-parser middleware.",
+          "detection_regex": null
+        },
+        {
+          "library": "next",
+          "hallucinated": "useRouter().query",
+          "real_api": "useSearchParams() in app router",
+          "notes": "In Next.js App Router, useRouter() no longer has .query. Use useSearchParams() instead.",
+          "detection_regex": "useRouter\\(\\)\\s*\\.\\s*query"
+        },
+        {
+          "library": "next",
+          "hallucinated": "next/navigation push with query object",
+          "real_api": "router.push(url_string)",
+          "notes": "App Router's router.push only accepts a string URL, not an object with pathname and query.",
+          "detection_regex": "router\\.push\\(\\s*\\{\\s*pathname"
+        },
+        {
+          "library": "react",
+          "hallucinated": "React.createRef() in function components",
+          "real_api": "useRef()",
+          "notes": "createRef is for class components. Function components should use the useRef hook.",
+          "detection_regex": null
+        },
+        {
+          "library": "react",
+          "hallucinated": "useState setter with callback",
+          "real_api": "useEffect for post-state logic",
+          "notes": "Unlike class setState, useState's setter does not accept a callback second argument.",
+          "detection_regex": "set[A-Z]\\w*\\([^,]+,\\s*\\(\\)\\s*=>"
+        },
+        {
+          "library": "prisma",
+          "hallucinated": "prisma.model.find()",
+          "real_api": "prisma.model.findUnique() or findFirst()",
+          "notes": "Prisma has no plain .find() method. Use findUnique, findFirst, or findMany.",
+          "detection_regex": "prisma\\.\\w+\\.find\\("
+        },
+        {
+          "library": "prisma",
+          "hallucinated": "prisma.model.update() without where",
+          "real_api": "prisma.model.update({ where: {...}, data: {...} })",
+          "notes": "Prisma update always requires a where clause.",
+          "detection_regex": null
+        },
+        {
+          "library": "mongoose",
+          "hallucinated": "Model.findByIdAndUpdate with lean()",
+          "real_api": "findByIdAndUpdate returns a Query, lean() works but behavior is subtle",
+          "notes": "AI often chains .lean() on update operations where it has no meaningful effect on the returned document.",
+          "detection_regex": null
+        },
+        {
+          "library": "zod",
+          "hallucinated": "z.validate(data)",
+          "real_api": "schema.parse(data) or schema.safeParse(data)",
+          "notes": "Zod schemas use .parse() or .safeParse(), not .validate().",
+          "detection_regex": "z\\.\\w+\\(\\)\\s*\\.\\s*validate\\("
+        },
+        {
+          "library": "zod",
+          "hallucinated": "z.string().email().min()",
+          "real_api": "z.string().min().email()",
+          "notes": "Order matters in Zod chains. min/max should come before refinements like email.",
+          "detection_regex": null
+        },
+        {
+          "library": "axios",
+          "hallucinated": "axios.post(url, { headers })",
+          "real_api": "axios.post(url, data, { headers })",
+          "notes": "axios.post takes data as second arg, config as third. AI often puts config in second position.",
+          "detection_regex": null
+        },
+        {
+          "library": "jsonwebtoken",
+          "hallucinated": "jwt.decode() for verification",
+          "real_api": "jwt.verify(token, secret)",
+          "notes": "jwt.decode does NOT verify the signature. Always use jwt.verify for auth.",
+          "detection_regex": "jwt\\.decode\\("
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const router = useRouter();\nconst { id } = router.query;",
+          "good": "const params = useParams();\nconst id = params.id;\n// or\nconst searchParams = useSearchParams();\nconst id = searchParams.get('id');",
+          "explanation": "In Next.js App Router, useRouter() from next/navigation has no .query property. Use useParams() for path params or useSearchParams() for query params."
+        },
+        {
+          "bad": "const user = await prisma.user.find({ email: 'a@b.com' });",
+          "good": "const user = await prisma.user.findUnique({ where: { email: 'a@b.com' } });",
+          "explanation": "Prisma has no .find() method. Use findUnique (requires unique field) or findFirst."
+        },
+        {
+          "bad": "const decoded = jwt.decode(token);\nif (decoded.userId) { /* grant access */ }",
+          "good": "const decoded = jwt.verify(token, process.env.JWT_SECRET);\nif (decoded.userId) { /* grant access */ }",
+          "explanation": "jwt.decode does NOT verify the token signature. Anyone can craft a token that decodes successfully. Always use jwt.verify for authentication."
+        }
+      ]
+    },
+
+    {
+      "id": "HALLUCINATED_API_003",
+      "category": "HALLUCINATED_API",
+      "severity": "critical",
+      "description": "Non-existent or confused Python standard library and popular package APIs",
+      "languages": ["python"],
+      "detection_strategy": {
+        "type": "method_existence_check",
+        "targets": ["Python source files"],
+        "method": "Parse method calls and verify against known Python API surfaces using AST analysis or a known-methods database."
+      },
+      "known_hallucinations": [
+        {
+          "object": "dict",
+          "hallucinated_method": "dict.has_key()",
+          "real_method": "'key' in dict",
+          "notes": "dict.has_key() was removed in Python 3. Use 'key in dict'.",
+          "detection_regex": "\\.has_key\\("
+        },
+        {
+          "object": "list",
+          "hallucinated_method": "list.contains()",
+          "real_method": "'item' in list",
+          "notes": "No .contains() method on lists. Use 'item in list'.",
+          "detection_regex": "\\.contains\\("
+        },
+        {
+          "object": "str",
+          "hallucinated_method": "str.to_int()",
+          "real_method": "int(str)",
+          "notes": "No .to_int() on strings. Use int() built-in.",
+          "detection_regex": "\\.to_int\\("
+        },
+        {
+          "object": "str",
+          "hallucinated_method": "str.to_float()",
+          "real_method": "float(str)",
+          "notes": "No .to_float() on strings. Use float() built-in.",
+          "detection_regex": "\\.to_float\\("
+        },
+        {
+          "object": "str",
+          "hallucinated_method": "str.is_empty()",
+          "real_method": "not str or len(str) == 0",
+          "notes": "No .is_empty(). Use truthiness check: 'if not s:'.",
+          "detection_regex": "\\.is_empty\\("
+        },
+        {
+          "object": "os.path",
+          "hallucinated_method": "os.path.read()",
+          "real_method": "open(path).read() or Path(path).read_text()",
+          "notes": "os.path has no .read() method. Use open() or pathlib.",
+          "detection_regex": "os\\.path\\.read\\("
+        },
+        {
+          "library": "pandas",
+          "hallucinated_method": "df.to_json_records()",
+          "real_method": "df.to_json(orient='records')",
+          "notes": "No .to_json_records(). Use to_json(orient='records').",
+          "detection_regex": "\\.to_json_records\\("
+        },
+        {
+          "library": "pandas",
+          "hallucinated_method": "df.filter_by()",
+          "real_method": "df[df['col'] == val] or df.query()",
+          "notes": "No .filter_by() on DataFrames. That is SQLAlchemy syntax.",
+          "detection_regex": "df.*\\.filter_by\\("
+        },
+        {
+          "library": "fastapi",
+          "hallucinated_method": "app.route()",
+          "real_method": "app.get() / app.post() / @app.api_route()",
+          "notes": "FastAPI uses @app.get(), @app.post(), etc., not @app.route() like Flask.",
+          "detection_regex": "@app\\.route\\("
+        },
+        {
+          "library": "sqlalchemy",
+          "hallucinated_method": "session.query().all().filter()",
+          "real_method": "session.query().filter().all()",
+          "notes": ".all() returns a list, so .filter() cannot be chained after it.",
+          "detection_regex": "\\.all\\(\\)\\s*\\.filter\\("
+        },
+        {
+          "library": "pydantic",
+          "hallucinated_method": "model.dict()",
+          "real_method": "model.model_dump()",
+          "notes": "In Pydantic v2, .dict() is deprecated. Use .model_dump().",
+          "detection_regex": "\\.dict\\(\\)"
+        },
+        {
+          "library": "pydantic",
+          "hallucinated_method": "Model.parse_obj()",
+          "real_method": "Model.model_validate()",
+          "notes": "In Pydantic v2, .parse_obj() is deprecated. Use .model_validate().",
+          "detection_regex": "\\.parse_obj\\("
+        }
+      ],
+      "examples": [
+        {
+          "bad": "if my_dict.has_key('name'):",
+          "good": "if 'name' in my_dict:",
+          "explanation": "dict.has_key() was removed in Python 3. Use the 'in' operator."
+        },
+        {
+          "bad": "data = user.dict()",
+          "good": "data = user.model_dump()",
+          "explanation": "In Pydantic v2, .dict() is deprecated. Use .model_dump() instead."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_001",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Off-by-one errors in loops, slices, and boundary conditions",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "ast_pattern_matching",
+        "targets": ["source files"],
+        "method": "Analyze loop bounds, slice operations, and array indexing for common off-by-one patterns."
+      },
+      "heuristics": [
+        "Loop uses <= where < is correct (or vice versa)",
+        "Slice end index is off by one",
+        "Array index uses .length instead of .length - 1",
+        "Pagination offset calculation is wrong",
+        "Range is exclusive when inclusive was intended"
+      ],
+      "known_patterns": [
+        {
+          "id": "off_by_one_loop_bound",
+          "description": "Using <= array.length in a for loop (accesses index out of bounds)",
+          "detection_regex": "for\\s*\\([^;]+;\\s*\\w+\\s*<=\\s*\\w+\\.length\\s*;",
+          "confidence": 0.85,
+          "languages": ["javascript", "typescript"]
+        },
+        {
+          "id": "off_by_one_slice",
+          "description": "Wrong end index in slice operations",
+          "detection_regex": null,
+          "confidence": 0.5,
+          "languages": ["javascript", "typescript", "python"],
+          "notes": "Requires semantic understanding. Slice end is exclusive in both JS and Python."
+        },
+        {
+          "id": "off_by_one_pagination",
+          "description": "Pagination offset miscalculation (page * size vs (page - 1) * size)",
+          "detection_regex": "(?:page|pageNumber|pageNum)\\s*\\*\\s*(?:size|limit|pageSize|perPage)",
+          "confidence": 0.6,
+          "languages": ["javascript", "typescript", "python"],
+          "notes": "If pages are 1-indexed, offset should be (page - 1) * size. AI often uses page * size."
+        },
+        {
+          "id": "off_by_one_substring",
+          "description": "Using .substring with wrong indices",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "languages": ["javascript", "typescript"]
+        },
+        {
+          "id": "fence_post_error",
+          "description": "Counting items vs counting gaps between items",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "languages": ["javascript", "typescript", "python"],
+          "notes": "E.g., number of segments = number of dividers + 1. AI frequently gets this wrong."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "for (let i = 0; i <= arr.length; i++) {\n  console.log(arr[i]);\n}",
+          "good": "for (let i = 0; i < arr.length; i++) {\n  console.log(arr[i]);\n}",
+          "explanation": "Using <= arr.length causes an access at arr[arr.length] which is undefined. Use < for zero-based indexing."
+        },
+        {
+          "bad": "const offset = page * pageSize;\nconst results = await db.query().skip(offset).limit(pageSize);",
+          "good": "const offset = (page - 1) * pageSize;\nconst results = await db.query().skip(offset).limit(pageSize);",
+          "explanation": "If pages are 1-indexed (page 1 = first page), the offset must be (page - 1) * pageSize. Using page * pageSize skips the first page."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_002",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Inverted boolean conditions and negation errors",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "ast_pattern_matching",
+        "targets": ["source files"],
+        "method": "Identify conditional expressions where the logic may be inverted relative to the described intent."
+      },
+      "heuristics": [
+        "Guard clause negation is inverted (should return early on failure, not success)",
+        "Auth check allows instead of denies",
+        "Null check is backwards",
+        "isEmpty check is inverted"
+      ],
+      "known_patterns": [
+        {
+          "id": "inverted_auth_check",
+          "description": "Auth check that allows unauthenticated users instead of blocking them",
+          "detection_regex": "if\\s*\\(\\s*(?:isAuthenticated|isAuthorized|isLoggedIn|isAdmin|hasPermission|session|user)\\s*\\)\\s*\\{?\\s*(?:return|throw|redirect).*(?:401|403|unauthorized|forbidden)",
+          "confidence": 0.7,
+          "languages": ["javascript", "typescript"],
+          "notes": "Guard clauses should check the NEGATIVE case: if (!isAuthenticated) return 401. AI often inverts this."
+        },
+        {
+          "id": "inverted_null_guard",
+          "description": "Null check that proceeds when null instead of when non-null",
+          "detection_regex": "if\\s*\\(\\s*\\w+\\s*\\)\\s*\\{?\\s*(?:return|throw)\\s+(?:null|undefined|new Error)",
+          "confidence": 0.5,
+          "languages": ["javascript", "typescript"],
+          "notes": "Early returns should trigger on the null/undefined case: if (!value) return null."
+        },
+        {
+          "id": "inverted_feature_flag",
+          "description": "Feature flag check that shows feature when disabled",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "languages": ["javascript", "typescript", "python"],
+          "notes": "if (featureDisabled) { showFeature() } -- AI confuses positive and negative flag names."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "if (isAuthenticated) {\n  return res.status(401).json({ error: 'Unauthorized' });\n}\n// proceed with protected logic",
+          "good": "if (!isAuthenticated) {\n  return res.status(401).json({ error: 'Unauthorized' });\n}\n// proceed with protected logic",
+          "explanation": "The guard clause should block unauthenticated users. Without the negation, it blocks authenticated users instead."
+        },
+        {
+          "bad": "const user = await getUser(id);\nif (user) {\n  throw new Error('User not found');\n}",
+          "good": "const user = await getUser(id);\nif (!user) {\n  throw new Error('User not found');\n}",
+          "explanation": "The null check is inverted. It throws 'not found' when the user IS found."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_003",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "critical",
+      "description": "Swapped arguments in security-sensitive function calls",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "argument_order_check",
+        "targets": ["source files"],
+        "method": "Check argument order for known security-sensitive functions where swapping creates vulnerabilities."
+      },
+      "heuristics": [
+        "bcrypt.compare with hash and plaintext swapped",
+        "crypto.timingSafeEqual with attacker-controlled value in wrong position",
+        "JWT sign with payload and secret swapped",
+        "HMAC with key and data swapped"
+      ],
+      "known_patterns": [
+        {
+          "id": "bcrypt_compare_swap",
+          "description": "bcrypt.compare arguments swapped: hash first, plaintext second",
+          "detection_regex": "bcrypt\\.compare\\(\\s*(?:hash|hashed|encrypted|stored|saved|db)",
+          "confidence": 0.75,
+          "correct_signature": "bcrypt.compare(plaintext, hash)",
+          "notes": "bcrypt.compare takes (plaintext, hash). AI frequently puts the hash first."
+        },
+        {
+          "id": "hmac_key_data_swap",
+          "description": "HMAC created with data as key and key as data",
+          "detection_regex": "createHmac\\(\\s*['\"]\\w+['\"]\\s*,\\s*(?:data|body|payload|message|content)",
+          "confidence": 0.6,
+          "correct_signature": "crypto.createHmac(algorithm, key)",
+          "notes": "createHmac second arg is the key, not the data. Data goes in .update()."
+        },
+        {
+          "id": "timing_safe_equal_swap",
+          "description": "timingSafeEqual with user input as first argument",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "correct_signature": "crypto.timingSafeEqual(expected, actual)",
+          "notes": "While functionally equivalent, convention is expected first for clarity."
+        },
+        {
+          "id": "jwt_sign_swap",
+          "description": "jwt.sign with secret in payload position",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "correct_signature": "jwt.sign(payload, secret, options)",
+          "notes": "AI sometimes puts the secret or options object in the payload position."
+        },
+        {
+          "id": "python_bcrypt_swap",
+          "description": "Python bcrypt.checkpw with hash and password swapped",
+          "detection_regex": "checkpw\\(\\s*(?:hashed|hash|stored)",
+          "confidence": 0.75,
+          "correct_signature": "bcrypt.checkpw(password_bytes, hashed_bytes)",
+          "notes": "bcrypt.checkpw takes (password, hashed). AI often puts hashed first."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const isValid = await bcrypt.compare(user.passwordHash, plainTextPassword);",
+          "good": "const isValid = await bcrypt.compare(plainTextPassword, user.passwordHash);",
+          "explanation": "bcrypt.compare takes (plaintext, hash). Swapping the arguments may not throw an error but will always return false, locking all users out."
+        },
+        {
+          "bad": "const hmac = crypto.createHmac('sha256', requestBody);\nhmac.update(secret);",
+          "good": "const hmac = crypto.createHmac('sha256', secret);\nhmac.update(requestBody);",
+          "explanation": "createHmac takes the key as second argument. The data to sign goes in .update(). Swapping them produces a valid HMAC but with wrong semantics -- anyone with the data could forge signatures."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_004",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Wrong comparison operators and equality checks",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "operator_analysis",
+        "targets": ["source files"],
+        "method": "Identify comparisons that use the wrong operator type or compare incompatible values."
+      },
+      "known_patterns": [
+        {
+          "id": "loose_equality",
+          "description": "Using == instead of === in JavaScript",
+          "detection_regex": "[^!=<>]\\s*==[^=]",
+          "confidence": 0.6,
+          "languages": ["javascript", "typescript"],
+          "notes": "Loose equality causes type coercion bugs: '0' == false is true, '' == 0 is true, null == undefined is true."
+        },
+        {
+          "id": "reference_equality_objects",
+          "description": "Using === to compare objects or arrays (always false for different references)",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "languages": ["javascript", "typescript"],
+          "notes": "AI often writes arr1 === arr2 or obj1 === obj2 expecting deep equality."
+        },
+        {
+          "id": "string_number_comparison",
+          "description": "Comparing a string to a number without conversion",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "languages": ["javascript", "typescript"],
+          "notes": "'10' > '9' is false in JS because string comparison is lexicographic."
+        },
+        {
+          "id": "python_is_vs_equals",
+          "description": "Using 'is' instead of '==' for value comparison in Python",
+          "detection_regex": "\\bis\\b(?!\\s+(?:None|True|False|not))",
+          "confidence": 0.5,
+          "languages": ["python"],
+          "notes": "'is' checks identity, not equality. Works for None/True/False but not general values. AI often writes 'if x is 0' or 'if s is \"\"'."
+        },
+        {
+          "id": "float_equality",
+          "description": "Exact equality comparison of floating point numbers",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "languages": ["javascript", "typescript", "python"],
+          "notes": "0.1 + 0.2 === 0.3 is false. Use Math.abs(a - b) < epsilon."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "if (userInput == 0) {\n  // handle zero case\n}",
+          "good": "if (userInput === 0) {\n  // handle zero case\n}",
+          "explanation": "Loose equality (==) means '' == 0 is true, '0' == 0 is true, false == 0 is true. Use strict equality (===)."
+        },
+        {
+          "bad": "if (result is 200):\n    print('success')",
+          "good": "if result == 200:\n    print('success')",
+          "explanation": "Python 'is' checks object identity, not value equality. This may work for small integers due to CPython caching but is unreliable."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_005",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Async/await mistakes and unhandled promise patterns",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "async_pattern_analysis",
+        "targets": ["source files"],
+        "method": "Analyze async functions for missing awaits, unhandled rejections, and incorrect async patterns."
+      },
+      "known_patterns": [
+        {
+          "id": "missing_await",
+          "description": "Calling an async function without await",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "AI often drops await, especially in conditionals or when the result is used later."
+        },
+        {
+          "id": "await_in_foreach",
+          "description": "Using await inside Array.forEach (does not wait for completion)",
+          "detection_regex": "\\.forEach\\(\\s*async",
+          "confidence": 0.95,
+          "notes": "forEach does not await the callback. Use for...of loop or Promise.all(arr.map(...))."
+        },
+        {
+          "id": "await_in_filter_map",
+          "description": "Using await inside .filter() or .map() without Promise.all",
+          "detection_regex": "\\.(?:filter|map)\\(\\s*async",
+          "confidence": 0.8,
+          "notes": ".filter(async fn) always returns all items because async functions return truthy promises. .map(async fn) returns Promise[], not resolved values."
+        },
+        {
+          "id": "return_await_unnecessary",
+          "description": "Unnecessary return await in non-try-catch context",
+          "detection_regex": "return\\s+await\\s+",
+          "confidence": 0.3,
+          "notes": "return await is unnecessary unless inside a try-catch block. Minor issue but indicates AI pattern."
+        },
+        {
+          "id": "async_constructor",
+          "description": "Making a class constructor async (not allowed)",
+          "detection_regex": "async\\s+constructor\\s*\\(",
+          "confidence": 1.0,
+          "notes": "Constructors cannot be async. Use a static async factory method instead."
+        },
+        {
+          "id": "promise_constructor_antipattern",
+          "description": "Wrapping an existing promise in a new Promise constructor",
+          "detection_regex": "new\\s+Promise\\([^)]*=>\\s*\\{[^}]*await",
+          "confidence": 0.7,
+          "notes": "If you already have a promise, don't wrap it in new Promise. Just return/await it directly."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "users.forEach(async (user) => {\n  await sendEmail(user.email);\n});\nconsole.log('All emails sent!');",
+          "good": "for (const user of users) {\n  await sendEmail(user.email);\n}\nconsole.log('All emails sent!');\n\n// Or for parallel:\nawait Promise.all(users.map(user => sendEmail(user.email)));\nconsole.log('All emails sent!');",
+          "explanation": "forEach does not await async callbacks. The loop fires all promises and immediately moves on. Use for...of for sequential or Promise.all for parallel."
+        },
+        {
+          "bad": "const activeUsers = users.filter(async (user) => {\n  const status = await checkStatus(user.id);\n  return status === 'active';\n});",
+          "good": "const statuses = await Promise.all(\n  users.map(user => checkStatus(user.id))\n);\nconst activeUsers = users.filter((_, i) => statuses[i] === 'active');",
+          "explanation": "filter() with an async callback returns ALL items because async functions return Promise objects, which are truthy. You must resolve the promises first."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_001",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated React patterns from AI training data",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.jsx", "*.tsx", "*.js", "*.ts"],
+        "method": "Scan for known deprecated React lifecycle methods, APIs, and patterns."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "componentWillMount",
+          "replacement": "useEffect with empty deps or constructor logic in useState initializer",
+          "since": "React 16.3",
+          "removed_in": "React 18 strict mode",
+          "detection_regex": "componentWillMount\\s*\\(",
+          "notes": "Unsafe lifecycle. Use useEffect or useState initializer."
+        },
+        {
+          "deprecated": "componentWillReceiveProps",
+          "replacement": "useEffect with dependency array or getDerivedStateFromProps",
+          "since": "React 16.3",
+          "removed_in": "React 18 strict mode",
+          "detection_regex": "componentWillReceiveProps\\s*\\(",
+          "notes": "Unsafe lifecycle. Usually a sign of derived state antipattern."
+        },
+        {
+          "deprecated": "componentWillUpdate",
+          "replacement": "useEffect or getSnapshotBeforeUpdate",
+          "since": "React 16.3",
+          "removed_in": "React 18 strict mode",
+          "detection_regex": "componentWillUpdate\\s*\\(",
+          "notes": "Unsafe lifecycle."
+        },
+        {
+          "deprecated": "React.createClass",
+          "replacement": "class Component extends React.Component or function component",
+          "since": "React 15.5",
+          "removed_in": "React 16",
+          "detection_regex": "React\\.createClass\\(",
+          "notes": "Removed entirely. AI still generates this occasionally."
+        },
+        {
+          "deprecated": "ReactDOM.render",
+          "replacement": "ReactDOM.createRoot(el).render()",
+          "since": "React 18",
+          "removed_in": null,
+          "detection_regex": "ReactDOM\\.render\\(",
+          "notes": "React 18 uses createRoot API. ReactDOM.render disables concurrent features."
+        },
+        {
+          "deprecated": "React.PropTypes",
+          "replacement": "TypeScript or the prop-types package",
+          "since": "React 15.5",
+          "removed_in": "React 16",
+          "detection_regex": "React\\.PropTypes",
+          "notes": "Moved to separate prop-types package, but TypeScript is now preferred."
+        },
+        {
+          "deprecated": "findDOMNode",
+          "replacement": "useRef",
+          "since": "React 16.3",
+          "removed_in": "React 19",
+          "detection_regex": "findDOMNode\\(",
+          "notes": "Use ref forwarding and useRef instead."
+        },
+        {
+          "deprecated": "defaultProps on function components",
+          "replacement": "Default parameter values in destructuring",
+          "since": "React 18.3",
+          "removed_in": "React 19",
+          "detection_regex": "\\w+\\.defaultProps\\s*=",
+          "notes": "Use default values in parameter destructuring: function Comp({ size = 'md' })."
+        },
+        {
+          "deprecated": "React.forwardRef",
+          "replacement": "ref as a regular prop (React 19+)",
+          "since": "React 19",
+          "removed_in": null,
+          "detection_regex": "React\\.forwardRef\\(",
+          "notes": "In React 19, ref is passed as a regular prop. forwardRef is no longer needed."
+        },
+        {
+          "deprecated": "useContext pattern: Context.Consumer",
+          "replacement": "useContext hook",
+          "since": "React 16.8",
+          "removed_in": null,
+          "detection_regex": "<\\w+\\.Consumer>",
+          "notes": "The Consumer render prop pattern is deprecated in favor of the useContext hook."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "ReactDOM.render(<App />, document.getElementById('root'));",
+          "good": "const root = ReactDOM.createRoot(document.getElementById('root'));\nroot.render(<App />);",
+          "explanation": "ReactDOM.render is deprecated in React 18. Use createRoot for concurrent features."
+        },
+        {
+          "bad": "MyComponent.defaultProps = {\n  size: 'medium',\n  variant: 'primary'\n};",
+          "good": "function MyComponent({ size = 'medium', variant = 'primary' }) {\n  // ...\n}",
+          "explanation": "defaultProps on function components is deprecated in React 18.3 and removed in React 19. Use JavaScript default parameters."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_002",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated Next.js patterns from AI training data",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.jsx", "*.tsx", "*.js", "*.ts"],
+        "method": "Detect Next.js patterns that are obsolete in the App Router paradigm."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "getServerSideProps in app/ directory",
+          "replacement": "async Server Components or route handlers",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": "export\\s+(?:async\\s+)?function\\s+getServerSideProps",
+          "context": "Only deprecated if file is in the app/ directory. Still valid in pages/.",
+          "notes": "AI frequently mixes Pages Router and App Router patterns."
+        },
+        {
+          "deprecated": "getStaticProps in app/ directory",
+          "replacement": "async Server Components with fetch + revalidate",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": "export\\s+(?:async\\s+)?function\\s+getStaticProps",
+          "context": "Only deprecated if file is in the app/ directory. Still valid in pages/.",
+          "notes": "Use fetch() with { next: { revalidate: seconds } } in Server Components."
+        },
+        {
+          "deprecated": "getStaticPaths in app/ directory",
+          "replacement": "generateStaticParams",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": "export\\s+(?:async\\s+)?function\\s+getStaticPaths",
+          "context": "Only deprecated if file is in the app/ directory.",
+          "notes": "Use export async function generateStaticParams() in App Router."
+        },
+        {
+          "deprecated": "next/head in app/ directory",
+          "replacement": "Metadata API (export const metadata or generateMetadata)",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": "import.*from\\s+['\"]next/head['\"]",
+          "context": "Deprecated in app/ directory. Still valid in pages/.",
+          "notes": "Use export const metadata = {} or export async function generateMetadata()."
+        },
+        {
+          "deprecated": "next/router in app/ directory",
+          "replacement": "next/navigation",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": "import.*from\\s+['\"]next/router['\"]",
+          "context": "Use next/navigation in app/ directory.",
+          "notes": "useRouter from next/navigation has a different API. No .query, .asPath, etc."
+        },
+        {
+          "deprecated": "_app.js/_app.tsx pattern in app/ directory",
+          "replacement": "layout.tsx",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": null,
+          "notes": "App Router uses layout.tsx instead of _app.tsx for shared layouts."
+        },
+        {
+          "deprecated": "_document.js/_document.tsx in app/ directory",
+          "replacement": "Root layout with <html> and <body> tags",
+          "since": "Next.js 13 (app router)",
+          "detection_regex": null,
+          "notes": "App Router uses the root layout.tsx to define html/body structure."
+        },
+        {
+          "deprecated": "next.config.js (CommonJS)",
+          "replacement": "next.config.ts or next.config.mjs",
+          "since": "Next.js 15",
+          "detection_regex": null,
+          "notes": "Next.js 15 supports TypeScript config. AI often generates CJS config."
+        },
+        {
+          "deprecated": "middleware.ts using NextResponse.rewrite for API proxying",
+          "replacement": "Route Handlers or rewrites in next.config",
+          "since": "Next.js 13",
+          "detection_regex": null,
+          "notes": "AI often suggests overly complex middleware when simpler solutions exist."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "// app/users/page.tsx\nexport async function getServerSideProps() {\n  const users = await fetchUsers();\n  return { props: { users } };\n}",
+          "good": "// app/users/page.tsx\nexport default async function UsersPage() {\n  const users = await fetchUsers();\n  return <UserList users={users} />;\n}",
+          "explanation": "getServerSideProps does not work in the App Router. Server Components can fetch data directly in the component body."
+        },
+        {
+          "bad": "// app/layout.tsx\nimport Head from 'next/head';\nexport default function Layout({ children }) {\n  return <><Head><title>My App</title></Head>{children}</>;\n}",
+          "good": "// app/layout.tsx\nimport type { Metadata } from 'next';\nexport const metadata: Metadata = { title: 'My App' };\nexport default function Layout({ children }) {\n  return <html><body>{children}</body></html>;\n}",
+          "explanation": "next/head does not work in App Router. Use the Metadata API instead."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_003",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated Node.js built-in APIs",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.js", "*.ts", "*.mjs", "*.cjs"],
+        "method": "Scan for known deprecated Node.js API calls."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "new Buffer()",
+          "replacement": "Buffer.from() or Buffer.alloc()",
+          "since": "Node.js 6",
+          "severity_override": "high",
+          "detection_regex": "new\\s+Buffer\\(",
+          "notes": "Security issue: new Buffer(number) creates uninitialized memory. Buffer.alloc() zeros memory."
+        },
+        {
+          "deprecated": "Buffer() constructor call",
+          "replacement": "Buffer.from() or Buffer.alloc()",
+          "since": "Node.js 6",
+          "severity_override": "high",
+          "detection_regex": "(?<!\\.\\s*)Buffer\\((?!\\.)(?!\\s*\\)\\s*\\.)",
+          "notes": "Same security issue as new Buffer()."
+        },
+        {
+          "deprecated": "url.parse()",
+          "replacement": "new URL()",
+          "since": "Node.js 11",
+          "detection_regex": "url\\.parse\\(",
+          "notes": "url.parse has known vulnerabilities with certain inputs. Use the WHATWG URL API."
+        },
+        {
+          "deprecated": "querystring module",
+          "replacement": "URLSearchParams",
+          "since": "Node.js 14",
+          "detection_regex": "require\\(['\"]querystring['\"]\\)|from\\s+['\"]querystring['\"]",
+          "notes": "Use URLSearchParams from the URL module."
+        },
+        {
+          "deprecated": "fs.exists()",
+          "replacement": "fs.access() or fs.stat()",
+          "since": "Node.js 1",
+          "detection_regex": "fs\\.exists\\(",
+          "notes": "fs.exists is deprecated due to race conditions. Use fs.access or try/catch with fs.stat."
+        },
+        {
+          "deprecated": "path.dirname(require.main.filename)",
+          "replacement": "import.meta.dirname or __dirname (CJS)",
+          "since": "Node.js 21",
+          "detection_regex": "require\\.main\\.filename",
+          "notes": "In ESM, use import.meta.dirname (Node 21+) or import.meta.url with fileURLToPath."
+        },
+        {
+          "deprecated": "crypto.createCipher()",
+          "replacement": "crypto.createCipheriv()",
+          "since": "Node.js 10",
+          "severity_override": "critical",
+          "detection_regex": "createCipher\\((?!iv)",
+          "notes": "createCipher uses weak key derivation. Always use createCipheriv with a proper IV."
+        },
+        {
+          "deprecated": "domain module",
+          "replacement": "async_hooks or proper error handling",
+          "since": "Node.js 4",
+          "detection_regex": "require\\(['\"]domain['\"]\\)|from\\s+['\"]domain['\"]",
+          "notes": "The domain module is deprecated. Use structured error handling or async_hooks."
+        },
+        {
+          "deprecated": "process.env.NODE_ENV set at runtime",
+          "replacement": "Set NODE_ENV before process starts",
+          "since": "Always",
+          "detection_regex": "process\\.env\\.NODE_ENV\\s*=",
+          "notes": "AI sometimes sets NODE_ENV at runtime. Many libraries read it once at import time."
+        },
+        {
+          "deprecated": "util.pump",
+          "replacement": "stream.pipeline",
+          "since": "Node.js 10",
+          "detection_regex": "util\\.pump\\(",
+          "notes": "Use stream.pipeline or stream.promises.pipeline."
+        },
+        {
+          "deprecated": "sys module",
+          "replacement": "util module",
+          "since": "Node.js 0.3",
+          "detection_regex": "require\\(['\"]sys['\"]\\)",
+          "notes": "Ancient deprecation but AI occasionally generates it."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const buf = new Buffer(userInput);",
+          "good": "const buf = Buffer.from(userInput, 'utf-8');",
+          "explanation": "new Buffer() is deprecated and has a security vulnerability: new Buffer(100) returns uninitialized memory that may contain sensitive data."
+        },
+        {
+          "bad": "const parsed = url.parse(req.url, true);\nconst id = parsed.query.id;",
+          "good": "const parsed = new URL(req.url, `http://${req.headers.host}`);\nconst id = parsed.searchParams.get('id');",
+          "explanation": "url.parse is deprecated and has known parsing vulnerabilities. Use the WHATWG URL constructor."
+        },
+        {
+          "bad": "const cipher = crypto.createCipher('aes-256-cbc', password);",
+          "good": "const iv = crypto.randomBytes(16);\nconst key = crypto.scryptSync(password, salt, 32);\nconst cipher = crypto.createCipheriv('aes-256-cbc', key, iv);",
+          "explanation": "createCipher uses an insecure key derivation. Always use createCipheriv with a proper key derivation function and random IV."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_004",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated Express.js APIs and patterns",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.js", "*.ts"],
+        "method": "Detect deprecated Express middleware and method usage."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "body-parser package (separate)",
+          "replacement": "express.json() and express.urlencoded()",
+          "since": "Express 4.16",
+          "detection_regex": "require\\(['\"]body-parser['\"]\\)|from\\s+['\"]body-parser['\"]",
+          "notes": "body-parser is built into Express since 4.16. No separate install needed."
+        },
+        {
+          "deprecated": "app.del()",
+          "replacement": "app.delete()",
+          "since": "Express 4",
+          "detection_regex": "app\\.del\\(",
+          "notes": "app.del was an alias removed in Express 4."
+        },
+        {
+          "deprecated": "res.sendfile() (lowercase f)",
+          "replacement": "res.sendFile() (capital F)",
+          "since": "Express 4.8",
+          "detection_regex": "res\\.sendfile\\(",
+          "notes": "Note the capitalization difference."
+        },
+        {
+          "deprecated": "req.param()",
+          "replacement": "req.params, req.query, or req.body directly",
+          "since": "Express 4.11",
+          "detection_regex": "req\\.param\\(",
+          "notes": "req.param() searched params, query, and body which was confusing. Be explicit."
+        },
+        {
+          "deprecated": "express.multipart()",
+          "replacement": "multer",
+          "since": "Express 4",
+          "detection_regex": "express\\.multipart\\(",
+          "notes": "Use the multer package for multipart form handling."
+        },
+        {
+          "deprecated": "app.configure()",
+          "replacement": "Direct conditional logic",
+          "since": "Express 4",
+          "detection_regex": "app\\.configure\\(",
+          "notes": "Use if (process.env.NODE_ENV === 'production') instead."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const bodyParser = require('body-parser');\napp.use(bodyParser.json());\napp.use(bodyParser.urlencoded({ extended: true }));",
+          "good": "app.use(express.json());\napp.use(express.urlencoded({ extended: true }));",
+          "explanation": "body-parser is built into Express since 4.16. No separate package needed."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_005",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated Python patterns from AI training data",
+      "languages": ["python"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.py"],
+        "method": "Scan for deprecated Python patterns and standard library usage."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "print statement (Python 2)",
+          "replacement": "print() function",
+          "since": "Python 3.0",
+          "detection_regex": "^\\s*print\\s+[^(]",
+          "notes": "AI occasionally generates Python 2 print statements."
+        },
+        {
+          "deprecated": "typing.Optional",
+          "replacement": "X | None (PEP 604)",
+          "since": "Python 3.10",
+          "detection_regex": "Optional\\[",
+          "notes": "Use X | None syntax instead of Optional[X] in Python 3.10+."
+        },
+        {
+          "deprecated": "typing.Union",
+          "replacement": "X | Y (PEP 604)",
+          "since": "Python 3.10",
+          "detection_regex": "Union\\[",
+          "notes": "Use X | Y syntax instead of Union[X, Y] in Python 3.10+."
+        },
+        {
+          "deprecated": "typing.List, typing.Dict, typing.Tuple, typing.Set",
+          "replacement": "list, dict, tuple, set (lowercase built-ins)",
+          "since": "Python 3.9",
+          "detection_regex": "(?:typing\\.)?(?:List|Dict|Tuple|Set)\\[",
+          "notes": "Use built-in generics: list[int], dict[str, int], etc."
+        },
+        {
+          "deprecated": "asyncio.coroutine decorator",
+          "replacement": "async def",
+          "since": "Python 3.8 (removed 3.11)",
+          "detection_regex": "@asyncio\\.coroutine",
+          "notes": "Use async def instead of @asyncio.coroutine with yield from."
+        },
+        {
+          "deprecated": "collections.MutableMapping etc.",
+          "replacement": "collections.abc.MutableMapping",
+          "since": "Python 3.3 (removed 3.10)",
+          "detection_regex": "from\\s+collections\\s+import\\s+(?:MutableMapping|MutableSequence|MutableSet|Mapping|Sequence|Iterator|Iterable)",
+          "notes": "ABCs moved to collections.abc submodule."
+        },
+        {
+          "deprecated": "distutils",
+          "replacement": "setuptools",
+          "since": "Python 3.10 (removed 3.12)",
+          "detection_regex": "from\\s+distutils|import\\s+distutils",
+          "notes": "distutils was removed in Python 3.12. Use setuptools."
+        },
+        {
+          "deprecated": "unittest.makeSuite()",
+          "replacement": "unittest.TestLoader.loadTestsFromTestCase()",
+          "since": "Python 3.2 (removed 3.13)",
+          "detection_regex": "makeSuite\\(",
+          "notes": "Use TestLoader methods instead."
+        },
+        {
+          "deprecated": "imp module",
+          "replacement": "importlib",
+          "since": "Python 3.4 (removed 3.12)",
+          "detection_regex": "import\\s+imp(?:\\s|$)|from\\s+imp\\s+import",
+          "notes": "Use importlib for programmatic imports."
+        },
+        {
+          "deprecated": "cgi module",
+          "replacement": "email.message, urllib.parse, or html module",
+          "since": "Python 3.11 (removed 3.13)",
+          "detection_regex": "import\\s+cgi(?:\\s|$)|from\\s+cgi\\s+import",
+          "notes": "cgi module was removed. Use modern alternatives."
+        },
+        {
+          "deprecated": "pkg_resources",
+          "replacement": "importlib.resources and importlib.metadata",
+          "since": "Python 3.9+",
+          "detection_regex": "import\\s+pkg_resources|from\\s+pkg_resources",
+          "notes": "pkg_resources is slow and deprecated. Use importlib.resources and importlib.metadata."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "from typing import List, Dict, Optional\ndef process(items: List[Dict[str, Optional[int]]]) -> None:",
+          "good": "def process(items: list[dict[str, int | None]]) -> None:",
+          "explanation": "In Python 3.10+, use built-in generics (list, dict) and X | None instead of typing.Optional. In 3.9, you can use built-in generics but not the | syntax."
+        },
+        {
+          "bad": "from collections import MutableMapping",
+          "good": "from collections.abc import MutableMapping",
+          "explanation": "Abstract base classes were removed from the top-level collections module in Python 3.10. Import from collections.abc."
+        }
+      ]
+    },
+
+    {
+      "id": "CONFIDENT_WRONG_TYPES_001",
+      "category": "CONFIDENT_WRONG_TYPES",
+      "severity": "high",
+      "description": "Unsafe type assertions that bypass TypeScript's type system",
+      "languages": ["typescript"],
+      "detection_strategy": {
+        "type": "ast_pattern_matching",
+        "targets": ["*.ts", "*.tsx"],
+        "method": "Scan for 'as' assertions, 'any' casts, non-null assertions (!), and @ts-ignore/@ts-expect-error comments."
+      },
+      "heuristics": [
+        "Type assertion used instead of proper type narrowing",
+        "as any used to silence type errors",
+        "Non-null assertion (!) on values that could genuinely be null",
+        "@ts-ignore used instead of fixing the type error",
+        "Double assertion (as unknown as T) to force incompatible types"
+      ],
+      "known_patterns": [
+        {
+          "id": "as_any",
+          "description": "Casting to 'any' to bypass type checking",
+          "detection_regex": "as\\s+any(?:\\s|[;,)\\]])",
+          "confidence": 0.8,
+          "severity_override": "high",
+          "notes": "Almost always a sign of a type error being suppressed rather than fixed."
+        },
+        {
+          "id": "double_assertion",
+          "description": "Double assertion through unknown (as unknown as T)",
+          "detection_regex": "as\\s+unknown\\s+as\\s+",
+          "confidence": 0.95,
+          "severity_override": "critical",
+          "notes": "Double assertion forces incompatible types. This almost always indicates a design problem."
+        },
+        {
+          "id": "non_null_assertion_on_find",
+          "description": "Non-null assertion on .find() result",
+          "detection_regex": "\\.find\\([^)]*\\)\\s*!",
+          "confidence": 0.85,
+          "notes": ".find() returns T | undefined. Using ! assumes it always finds a result."
+        },
+        {
+          "id": "non_null_assertion_on_dom",
+          "description": "Non-null assertion on DOM queries",
+          "detection_regex": "(?:getElementById|querySelector|getElementsBy)\\([^)]*\\)\\s*!",
+          "confidence": 0.7,
+          "notes": "DOM queries can return null. Using ! can cause runtime errors."
+        },
+        {
+          "id": "as_assertion_on_api_response",
+          "description": "Type assertion on API response without validation",
+          "detection_regex": "(?:json|data|response|result)\\s*(?:\\)|\\])\\s*as\\s+(?!any)",
+          "confidence": 0.7,
+          "notes": "API responses should be validated (e.g., with zod) not asserted."
+        },
+        {
+          "id": "ts_ignore_comment",
+          "description": "@ts-ignore without explanation",
+          "detection_regex": "@ts-ignore(?!\\s+\\S)",
+          "confidence": 0.8,
+          "notes": "Use @ts-expect-error with a comment explaining why the error is expected."
+        },
+        {
+          "id": "type_assertion_on_event",
+          "description": "Type assertion on event objects",
+          "detection_regex": "(?:event|e|ev)\\s+as\\s+\\w+Event",
+          "confidence": 0.5,
+          "notes": "Event handlers should use proper event types from React or DOM typings."
+        },
+        {
+          "id": "as_const_misuse",
+          "description": "Using 'as const' on mutable objects to fake immutability",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "'as const' only affects type inference, not runtime behavior. Object is still mutable."
+        },
+        {
+          "id": "generic_any",
+          "description": "Using any as a generic type parameter",
+          "detection_regex": "<\\s*any\\s*>",
+          "confidence": 0.7,
+          "notes": "Passing any as a generic parameter defeats the purpose of generics."
+        },
+        {
+          "id": "return_type_assertion",
+          "description": "Asserting return type instead of letting TypeScript infer",
+          "detection_regex": "return\\s+.*\\s+as\\s+",
+          "confidence": 0.5,
+          "notes": "If you need to assert the return type, the function logic likely doesn't match the expected type."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const data = await fetch('/api/users').then(r => r.json()) as User[];\nreturn data.map(u => u.name);",
+          "good": "const response = await fetch('/api/users');\nconst raw = await response.json();\nconst data = userArraySchema.parse(raw);\nreturn data.map(u => u.name);",
+          "explanation": "Type assertions on API responses provide zero runtime safety. The API could return anything. Validate with a schema library like zod."
+        },
+        {
+          "bad": "const element = document.getElementById('root')!;\nReactDOM.createRoot(element).render(<App />);",
+          "good": "const element = document.getElementById('root');\nif (!element) throw new Error('Root element not found');\nReactDOM.createRoot(element).render(<App />);",
+          "explanation": "Non-null assertion (!) on DOM queries suppresses a real possibility of null. Add an explicit check with a descriptive error."
+        },
+        {
+          "bad": "const user = users.find(u => u.id === id) as User;\nsendEmail(user.email);",
+          "good": "const user = users.find(u => u.id === id);\nif (!user) {\n  throw new Error(`User ${id} not found`);\n}\nsendEmail(user.email);",
+          "explanation": ".find() returns T | undefined. Asserting away the undefined case hides a potential runtime error when the item is not found."
+        },
+        {
+          "bad": "(config as any).secretField = value;",
+          "good": "// Fix the Config type to include secretField, or use a properly typed extension",
+          "explanation": "'as any' silences the type error but introduces a type hole. Fix the underlying type instead."
+        }
+      ]
+    },
+
+    {
+      "id": "CONFIDENT_WRONG_TYPES_002",
+      "category": "CONFIDENT_WRONG_TYPES",
+      "severity": "high",
+      "description": "Python type annotation mistakes AI commonly makes",
+      "languages": ["python"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.py"],
+        "method": "Analyze type annotations for common mistakes in Python typing."
+      },
+      "known_patterns": [
+        {
+          "id": "mutable_default_arg",
+          "description": "Mutable default argument in function definition",
+          "detection_regex": "def\\s+\\w+\\([^)]*(?::\\s*(?:list|dict|set)\\s*=\\s*(?:\\[\\]|\\{\\}))",
+          "confidence": 0.9,
+          "notes": "Classic Python gotcha. Mutable defaults are shared between calls. Use None as default and create inside function."
+        },
+        {
+          "id": "wrong_optional_syntax",
+          "description": "Using Optional incorrectly (Optional[X, Y] instead of Optional[X])",
+          "detection_regex": "Optional\\[[^\\]]+,\\s*[^\\]]+\\]",
+          "confidence": 0.95,
+          "notes": "Optional takes exactly one type argument. Optional[X] means X | None. For multiple types use Union."
+        },
+        {
+          "id": "type_vs_instance_check",
+          "description": "Using type() instead of isinstance() for type checking",
+          "detection_regex": "type\\(\\w+\\)\\s*(?:==|is)\\s*",
+          "confidence": 0.7,
+          "notes": "type() doesn't account for inheritance. Use isinstance() for type checking."
+        },
+        {
+          "id": "class_var_annotation_without_classvar",
+          "description": "Class variable annotated as instance variable in dataclasses",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "In dataclasses, plain annotations become instance fields. Use ClassVar[] for class-level attributes."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "def add_item(item: str, items: list = []) -> list:\n    items.append(item)\n    return items",
+          "good": "def add_item(item: str, items: list | None = None) -> list:\n    if items is None:\n        items = []\n    items.append(item)\n    return items",
+          "explanation": "Mutable default arguments are shared across all calls to the function. Each call that modifies the default list affects subsequent calls."
+        }
+      ]
+    },
+
+    {
+      "id": "MISSING_ERROR_HANDLING_001",
+      "category": "MISSING_ERROR_HANDLING",
+      "severity": "medium",
+      "description": "Missing error handling in async operations",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.js", "*.ts", "*.jsx", "*.tsx"],
+        "method": "Identify async operations without try-catch, .catch(), or error callbacks."
+      },
+      "heuristics": [
+        "fetch() calls without checking response.ok",
+        "await without try-catch in request handlers",
+        "Promise chains without .catch()",
+        "Event listeners on error-emitting objects without error handler",
+        "JSON.parse without try-catch"
+      ],
+      "known_patterns": [
+        {
+          "id": "fetch_no_ok_check",
+          "description": "fetch() without checking response.ok or response.status",
+          "detection_regex": "await\\s+fetch\\([^)]+\\)\\s*;|fetch\\([^)]+\\)\\.then\\(\\s*(?:r|res|response)\\s*=>\\s*(?:r|res|response)\\.json\\(\\)",
+          "confidence": 0.7,
+          "notes": "fetch does NOT throw on HTTP errors (404, 500). Only network failures throw. Must check response.ok."
+        },
+        {
+          "id": "json_parse_no_try_catch",
+          "description": "JSON.parse on untrusted input without error handling",
+          "detection_regex": "JSON\\.parse\\(",
+          "confidence": 0.5,
+          "notes": "JSON.parse throws SyntaxError on malformed input. Always wrap in try-catch when parsing external data."
+        },
+        {
+          "id": "promise_no_catch",
+          "description": "Promise chain without .catch() or enclosing try-catch",
+          "detection_regex": "\\.then\\([^)]+\\)(?!\\s*\\.catch)",
+          "confidence": 0.4,
+          "notes": "Unhandled promise rejections crash Node.js. Always handle the rejection case."
+        },
+        {
+          "id": "event_emitter_no_error",
+          "description": "EventEmitter or Stream without 'error' handler",
+          "detection_regex": null,
+          "confidence": 0.5,
+          "notes": "Unhandled 'error' events on EventEmitters crash the process."
+        },
+        {
+          "id": "async_handler_no_try_catch",
+          "description": "Express async route handler without error handling",
+          "detection_regex": "app\\.(?:get|post|put|patch|delete)\\([^,]+,\\s*async\\s*\\(",
+          "confidence": 0.6,
+          "notes": "Express does not catch errors from async handlers. Must wrap in try-catch or use express-async-errors."
+        },
+        {
+          "id": "file_operation_no_error",
+          "description": "File system operations without error handling",
+          "detection_regex": "fs\\.(?:readFile|writeFile|unlink|mkdir|rmdir|rename)\\(",
+          "confidence": 0.4,
+          "notes": "File operations can fail for many reasons (permissions, missing files, disk full). Always handle errors."
+        },
+        {
+          "id": "db_operation_no_error",
+          "description": "Database operations without error handling",
+          "detection_regex": "(?:prisma|mongoose|sequelize|knex|pool|client|db)\\.\\w+\\(",
+          "confidence": 0.3,
+          "notes": "Database operations can fail due to connection issues, constraint violations, timeouts, etc."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const response = await fetch('/api/data');\nconst data = await response.json();\nreturn data;",
+          "good": "const response = await fetch('/api/data');\nif (!response.ok) {\n  throw new Error(`HTTP ${response.status}: ${response.statusText}`);\n}\nconst data = await response.json();\nreturn data;",
+          "explanation": "fetch does not throw on HTTP error status codes. A 404 or 500 response will happily proceed to .json(), which may then fail with a confusing parse error instead of a clear HTTP error."
+        },
+        {
+          "bad": "app.get('/users/:id', async (req, res) => {\n  const user = await db.users.findById(req.params.id);\n  res.json(user);\n});",
+          "good": "app.get('/users/:id', async (req, res, next) => {\n  try {\n    const user = await db.users.findById(req.params.id);\n    if (!user) return res.status(404).json({ error: 'User not found' });\n    res.json(user);\n  } catch (err) {\n    next(err);\n  }\n});",
+          "explanation": "Express does not catch async errors. If the database query throws, the error is unhandled and the client hangs. Wrap in try-catch and call next(err)."
+        },
+        {
+          "bad": "const config = JSON.parse(userInput);",
+          "good": "let config;\ntry {\n  config = JSON.parse(userInput);\n} catch (e) {\n  throw new Error('Invalid JSON configuration');\n}",
+          "explanation": "JSON.parse throws SyntaxError on malformed input. When parsing user input or external data, always wrap in try-catch."
+        }
+      ]
+    },
+
+    {
+      "id": "MISSING_ERROR_HANDLING_002",
+      "category": "MISSING_ERROR_HANDLING",
+      "severity": "medium",
+      "description": "Missing error handling in Python code",
+      "languages": ["python"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.py"],
+        "method": "Identify operations that commonly fail without try-except blocks."
+      },
+      "known_patterns": [
+        {
+          "id": "bare_except",
+          "description": "Bare except clause that catches everything including SystemExit and KeyboardInterrupt",
+          "detection_regex": "except\\s*:",
+          "confidence": 0.85,
+          "notes": "Always specify the exception type. Use 'except Exception:' at minimum."
+        },
+        {
+          "id": "silent_except_pass",
+          "description": "except with only pass (silently swallowing errors)",
+          "detection_regex": "except.*:\\s*\\n\\s*pass",
+          "confidence": 0.7,
+          "notes": "Silently ignoring exceptions hides bugs. At minimum, log the error."
+        },
+        {
+          "id": "unhandled_file_open",
+          "description": "open() without context manager or error handling",
+          "detection_regex": "(?<!with )open\\([^)]+\\)(?!\\s*as\\b)",
+          "confidence": 0.6,
+          "notes": "Always use 'with open(...) as f:' to ensure the file is closed, even on error."
+        },
+        {
+          "id": "unhandled_requests",
+          "description": "requests.get/post without error handling",
+          "detection_regex": "requests\\.(?:get|post|put|patch|delete)\\(",
+          "confidence": 0.5,
+          "notes": "HTTP requests can fail with ConnectionError, Timeout, etc. Use try-except or response.raise_for_status()."
+        },
+        {
+          "id": "unhandled_json_loads",
+          "description": "json.loads on untrusted input without error handling",
+          "detection_regex": "json\\.loads\\(",
+          "confidence": 0.5,
+          "notes": "json.loads raises JSONDecodeError on malformed input."
+        },
+        {
+          "id": "key_access_no_default",
+          "description": "Dict key access without .get() or KeyError handling",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "dict['key'] raises KeyError. Use dict.get('key', default) for potentially missing keys."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "try:\n    process_data(payload)\nexcept:\n    pass",
+          "good": "try:\n    process_data(payload)\nexcept ValueError as e:\n    logger.warning(f'Invalid payload: {e}')\nexcept Exception as e:\n    logger.error(f'Unexpected error processing data: {e}')\n    raise",
+          "explanation": "Bare 'except: pass' silently swallows ALL errors, including SystemExit and KeyboardInterrupt, making debugging impossible."
+        },
+        {
+          "bad": "f = open('data.txt', 'r')\ncontent = f.read()\nf.close()",
+          "good": "with open('data.txt', 'r') as f:\n    content = f.read()",
+          "explanation": "Without a context manager, if f.read() raises an exception, f.close() is never called, leaking the file descriptor."
+        }
+      ]
+    },
+
+    {
+      "id": "MISSING_ERROR_HANDLING_003",
+      "category": "MISSING_ERROR_HANDLING",
+      "severity": "medium",
+      "description": "Convention-violating error handling detection heuristics",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "convention_analysis",
+        "targets": ["source files"],
+        "method": "Analyze existing error handling patterns in the project and flag new code that violates established conventions."
+      },
+      "convention_detection_heuristics": [
+        {
+          "id": "project_uses_custom_error_classes",
+          "description": "Project defines custom error classes but AI uses generic Error",
+          "detection_method": "Scan for class definitions extending Error/Exception. If found, flag new code that throws plain Error.",
+          "detection_regex": "class\\s+\\w+Error\\s+extends\\s+(?:Error|BaseError|AppError)",
+          "notes": "If the project has AppError, NotFoundError, etc., new code should use them."
+        },
+        {
+          "id": "project_uses_result_type",
+          "description": "Project uses Result/Either pattern but AI throws exceptions",
+          "detection_method": "Check for Result<T, E> or Either type usage. If found, flag new code that throws instead of returning Result.",
+          "detection_regex": "(?:Result|Either)<",
+          "notes": "Some projects use functional error handling. AI defaults to throw/try-catch."
+        },
+        {
+          "id": "project_uses_error_boundary",
+          "description": "Project has React error boundaries but AI doesn't throw renderable errors",
+          "detection_method": "Check for ErrorBoundary components. If found, verify that errors thrown in components will be caught.",
+          "detection_regex": "componentDidCatch|ErrorBoundary",
+          "notes": "Error boundaries only catch errors during rendering, not in event handlers or async code."
+        },
+        {
+          "id": "project_uses_global_handler",
+          "description": "Project has a global error handler middleware but AI adds redundant try-catch",
+          "detection_method": "Check for Express error middleware (app.use with 4 params). If found, AI code may not need individual try-catch.",
+          "detection_regex": "app\\.use\\(\\s*(?:function\\s*)?\\(\\s*err",
+          "notes": "If the project uses express-async-errors + global handler, individual try-catch may be unnecessary noise."
+        },
+        {
+          "id": "project_uses_logging",
+          "description": "Project uses a logging library but AI uses console.error",
+          "detection_method": "Check for logger imports (winston, pino, bunyan, log4js). If found, flag console.error in new code.",
+          "detection_regex": "(?:winston|pino|bunyan|log4js|logger)\\.(?:error|warn|info)",
+          "notes": "AI defaults to console.error which bypasses structured logging."
+        },
+        {
+          "id": "project_uses_monitoring",
+          "description": "Project uses error monitoring (Sentry, Datadog, etc.) but AI doesn't report errors",
+          "detection_method": "Check for Sentry/monitoring imports. If found, flag error catches that don't report.",
+          "detection_regex": "(?:Sentry|@sentry|datadog|newrelic|bugsnag)\\.(?:captureException|captureError)",
+          "notes": "Caught errors should be reported to the monitoring service."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "throw new Error('User not found');",
+          "good": "throw new NotFoundError('User not found');",
+          "explanation": "The project defines custom error classes for consistency and error handling middleware. Using plain Error bypasses error categorization."
+        },
+        {
+          "bad": "catch (error) {\n  console.error('Failed:', error);\n}",
+          "good": "catch (error) {\n  logger.error({ err: error, context: 'user-service' }, 'Operation failed');\n  Sentry.captureException(error);\n}",
+          "explanation": "The project uses pino for structured logging and Sentry for error monitoring. console.error bypasses both systems."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_006",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Incorrect regex patterns AI commonly generates",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "regex_validation",
+        "targets": ["source files"],
+        "method": "Parse regex literals and validate them against known incorrect patterns."
+      },
+      "known_patterns": [
+        {
+          "id": "email_regex_too_simple",
+          "description": "Overly simple email regex that rejects valid emails or accepts invalid ones",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "Email validation is notoriously hard. Simple regexes miss valid addresses (e.g., with +, subdomains) or accept invalid ones. Use a library or just check for @ and send a confirmation."
+        },
+        {
+          "id": "url_regex_wrong",
+          "description": "URL regex that misses valid URLs or has catastrophic backtracking",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "URL validation via regex is complex. Use the URL constructor for validation instead."
+        },
+        {
+          "id": "unescaped_dot_in_regex",
+          "description": "Using '.' (any char) when literal dot was intended",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "AI often forgets to escape dots in regexes for IP addresses, domain names, etc."
+        },
+        {
+          "id": "catastrophic_backtracking",
+          "description": "Regex with nested quantifiers that causes exponential backtracking",
+          "detection_regex": null,
+          "confidence": 0.8,
+          "notes": "Patterns like (a+)+ or (a|a)+ cause catastrophic backtracking. Can be exploited for ReDoS attacks."
+        },
+        {
+          "id": "phone_regex_locale_specific",
+          "description": "Phone number regex that only works for one country",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "AI often generates US-only phone regexes. Use a library like libphonenumber for international support."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const isValidEmail = (email) => /^[a-zA-Z0-9]+@[a-zA-Z0-9]+\\.[a-zA-Z]{2,}$/.test(email);",
+          "good": "const isValidEmail = (email) => {\n  try {\n    const [local, domain] = email.split('@');\n    return local && domain && domain.includes('.') && !email.includes(' ');\n  } catch {\n    return false;\n  }\n};",
+          "explanation": "The regex rejects valid emails with +, dots in local part, hyphens in domain, long TLDs, etc. Email validation via regex is almost always wrong. Do a basic check and send a confirmation email."
+        },
+        {
+          "bad": "const pattern = /^(a+)+$/;\npattern.test(userInput);",
+          "good": "const pattern = /^a+$/;\npattern.test(userInput);",
+          "explanation": "Nested quantifiers (a+)+ cause catastrophic backtracking on inputs like 'aaaaaaaaaaaaaab'. This can be exploited to freeze the server (ReDoS attack)."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_007",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Race conditions and concurrency bugs AI commonly introduces",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "concurrency_analysis",
+        "targets": ["source files"],
+        "method": "Identify patterns that are vulnerable to race conditions."
+      },
+      "known_patterns": [
+        {
+          "id": "check_then_act",
+          "description": "Check-then-act pattern without atomicity (TOCTOU)",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "if (exists) then write, if (available) then reserve -- the check and action are not atomic."
+        },
+        {
+          "id": "read_modify_write",
+          "description": "Read-modify-write without locking or atomic operations",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "counter = await getCount(); counter++; await setCount(counter); -- not atomic."
+        },
+        {
+          "id": "shared_mutable_closure",
+          "description": "Shared mutable variable in concurrent callback contexts",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "let result; promises.forEach(async p => { result = await p; }); -- result is overwritten by whoever finishes last."
+        },
+        {
+          "id": "unawaited_state_update",
+          "description": "Multiple state updates without batching in React",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "In React 17 and below, state updates outside React event handlers are not batched. React 18 batches them automatically."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const user = await db.findUser(email);\nif (!user) {\n  await db.createUser({ email });\n}",
+          "good": "try {\n  await db.createUser({ email });\n} catch (e) {\n  if (e.code === 'P2002') {\n    // User already exists, handle accordingly\n  } else throw e;\n}",
+          "explanation": "Between the findUser check and createUser call, another request could create the same user. Use database-level uniqueness constraints and handle the conflict."
+        }
+      ]
+    },
+
+    {
+      "id": "HALLUCINATED_API_004",
+      "category": "HALLUCINATED_API",
+      "severity": "critical",
+      "description": "Non-existent CSS/Tailwind classes AI commonly generates",
+      "languages": ["css", "html", "javascript", "typescript"],
+      "detection_strategy": {
+        "type": "class_name_lookup",
+        "targets": ["*.jsx", "*.tsx", "*.html", "*.css"],
+        "method": "Check Tailwind class names against the actual Tailwind CSS configuration and class list."
+      },
+      "known_hallucinations": [
+        {
+          "hallucinated": "text-bold",
+          "real_class": "font-bold",
+          "notes": "Tailwind uses font-bold, not text-bold."
+        },
+        {
+          "hallucinated": "flex-middle",
+          "real_class": "items-center",
+          "notes": "No flex-middle class. Use items-center for vertical centering in a flex container."
+        },
+        {
+          "hallucinated": "flex-between",
+          "real_class": "justify-between",
+          "notes": "No flex-between. Use justify-between."
+        },
+        {
+          "hallucinated": "text-ellipsis",
+          "real_class": "truncate",
+          "notes": "Use the truncate utility which sets overflow, text-overflow, and white-space together."
+        },
+        {
+          "hallucinated": "align-center",
+          "real_class": "text-center or items-center",
+          "notes": "No align-center in Tailwind. Use text-center for text alignment or items-center for flex alignment."
+        },
+        {
+          "hallucinated": "display-flex",
+          "real_class": "flex",
+          "notes": "Tailwind uses short-form: flex, block, grid, etc."
+        },
+        {
+          "hallucinated": "bg-opacity-50",
+          "real_class": "bg-black/50",
+          "notes": "In Tailwind v3+, use the color/opacity syntax: bg-black/50 instead of separate bg-opacity utilities."
+        },
+        {
+          "hallucinated": "shadow-xs",
+          "real_class": "shadow-sm",
+          "notes": "Tailwind uses shadow-sm as the smallest named shadow. shadow-xs was added in v4 only."
+        },
+        {
+          "hallucinated": "rounded-xs",
+          "real_class": "rounded-sm",
+          "notes": "Smallest named border-radius is rounded-sm."
+        },
+        {
+          "hallucinated": "text-primary",
+          "real_class": "text-blue-600 (or custom theme color)",
+          "notes": "text-primary only works if 'primary' is defined in the Tailwind config theme. Not a default class."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "<div className=\"flex flex-between text-bold\">",
+          "good": "<div className=\"flex justify-between font-bold\">",
+          "explanation": "flex-between and text-bold are not valid Tailwind classes. Use justify-between and font-bold."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_008",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "critical",
+      "description": "Security-sensitive logic errors AI commonly introduces",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "security_pattern_analysis",
+        "targets": ["source files"],
+        "method": "Identify patterns that create security vulnerabilities."
+      },
+      "known_patterns": [
+        {
+          "id": "sql_injection",
+          "description": "String concatenation or template literals in SQL queries",
+          "detection_regex": "(?:query|execute|raw|sql)\\s*\\(\\s*(?:`[^`]*\\$\\{|['\"][^'\"]*['\"]\\s*\\+)",
+          "confidence": 0.8,
+          "notes": "AI often interpolates user input directly into SQL strings instead of using parameterized queries.",
+          "severity_override": "critical"
+        },
+        {
+          "id": "xss_via_inner_html",
+          "description": "Setting inner HTML with user-controlled content",
+          "detection_regex": "\\.innerHTML\\s*=",
+          "confidence": 0.6,
+          "notes": "AI often sets innerHTML without sanitizing input, creating XSS vulnerabilities.",
+          "severity_override": "critical"
+        },
+        {
+          "id": "weak_random",
+          "description": "Using Math.random() for security-sensitive operations",
+          "detection_regex": "Math\\.random\\(\\)",
+          "confidence": 0.3,
+          "notes": "Math.random() is not cryptographically secure. Use crypto.randomUUID() or crypto.getRandomValues().",
+          "severity_override": "high"
+        },
+        {
+          "id": "hardcoded_secret",
+          "description": "Hardcoded secrets, API keys, or passwords in source code",
+          "detection_regex": "(?:password|secret|api_?key|token|auth)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]",
+          "confidence": 0.6,
+          "notes": "AI often includes placeholder secrets that look like real ones. Always use environment variables.",
+          "severity_override": "critical"
+        },
+        {
+          "id": "path_traversal",
+          "description": "File path constructed from user input without sanitization",
+          "detection_regex": "(?:readFile|writeFile|createReadStream|open)\\(.*(?:req\\.|params\\.|query\\.|body\\.)",
+          "confidence": 0.7,
+          "notes": "User input in file paths enables directory traversal attacks (../../etc/passwd).",
+          "severity_override": "critical"
+        },
+        {
+          "id": "unsafe_code_execution",
+          "description": "Dynamic code execution with user-controlled input via Function constructor or similar mechanisms",
+          "detection_regex": "new\\s+Function\\(",
+          "confidence": 0.7,
+          "notes": "AI sometimes uses dynamic code execution for flexibility instead of safer alternatives like lookup tables or strategy patterns.",
+          "severity_override": "critical"
+        },
+        {
+          "id": "open_redirect",
+          "description": "Redirect URL from user input without validation",
+          "detection_regex": "(?:redirect|location\\.href|window\\.location)\\s*(?:=|\\()\\s*(?:req\\.|params\\.|query\\.|searchParams)",
+          "confidence": 0.6,
+          "notes": "User-controlled redirect URLs enable phishing attacks.",
+          "severity_override": "high"
+        },
+        {
+          "id": "cors_wildcard",
+          "description": "CORS origin set to * with credentials",
+          "detection_regex": "(?:origin|Access-Control-Allow-Origin).*['\"]\\*['\"]",
+          "confidence": 0.5,
+          "notes": "Wildcard CORS origin with credentials is insecure and actually blocked by browsers. AI generates it anyway.",
+          "severity_override": "high"
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const users = await db.query(`SELECT * FROM users WHERE name = '${req.query.name}'`);",
+          "good": "const users = await db.query('SELECT * FROM users WHERE name = $1', [req.query.name]);",
+          "explanation": "String interpolation in SQL queries enables SQL injection. Always use parameterized queries."
+        },
+        {
+          "bad": "const token = Math.random().toString(36).slice(2);",
+          "good": "const token = crypto.randomUUID();\n// or\nconst token = crypto.randomBytes(32).toString('hex');",
+          "explanation": "Math.random() is predictable and not suitable for tokens, session IDs, or any security-sensitive values."
+        },
+        {
+          "bad": "const filePath = path.join('/uploads', req.params.filename);\nconst content = fs.readFileSync(filePath);",
+          "good": "const filename = path.basename(req.params.filename);\nconst filePath = path.join('/uploads', filename);\nif (!filePath.startsWith('/uploads/')) throw new Error('Invalid path');\nconst content = fs.readFileSync(filePath);",
+          "explanation": "Without sanitization, a filename like '../../etc/passwd' allows reading arbitrary files on the server."
+        }
+      ]
+    },
+
+    {
+      "id": "DEPRECATED_API_006",
+      "category": "DEPRECATED_API",
+      "severity": "medium",
+      "description": "Deprecated or outdated web platform APIs",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "pattern_matching",
+        "targets": ["*.js", "*.ts", "*.jsx", "*.tsx"],
+        "method": "Scan for deprecated Web API usage."
+      },
+      "known_deprecations": [
+        {
+          "deprecated": "document.write()",
+          "replacement": "DOM manipulation methods",
+          "since": "HTML5",
+          "detection_regex": "document\\.write\\(",
+          "notes": "document.write can cause issues with parsing and is blocked in some contexts."
+        },
+        {
+          "deprecated": "document.all",
+          "replacement": "document.querySelectorAll()",
+          "since": "HTML5",
+          "detection_regex": "document\\.all",
+          "notes": "document.all is falsy despite being an object. A legacy quirk."
+        },
+        {
+          "deprecated": "XMLHttpRequest",
+          "replacement": "fetch() API",
+          "since": "2015",
+          "detection_regex": "new\\s+XMLHttpRequest|XMLHttpRequest\\(\\)",
+          "notes": "Use the Fetch API or a library like axios. XHR is legacy."
+        },
+        {
+          "deprecated": "navigator.appVersion",
+          "replacement": "navigator.userAgent or feature detection",
+          "since": "2010s",
+          "detection_regex": "navigator\\.appVersion",
+          "notes": "Deprecated and returns misleading values. Use feature detection."
+        },
+        {
+          "deprecated": "KeyboardEvent.keyCode",
+          "replacement": "KeyboardEvent.key",
+          "since": "2016",
+          "detection_regex": "\\.keyCode",
+          "notes": "Use event.key instead of event.keyCode for keyboard events."
+        },
+        {
+          "deprecated": "Event.returnValue",
+          "replacement": "Event.preventDefault()",
+          "since": "DOM Level 2",
+          "detection_regex": "\\.returnValue\\s*=\\s*false",
+          "notes": "Use event.preventDefault() instead."
+        },
+        {
+          "deprecated": "window.event",
+          "replacement": "event parameter in handler",
+          "since": "Always in standards",
+          "detection_regex": "window\\.event",
+          "notes": "window.event is non-standard. Accept the event as a handler parameter."
+        },
+        {
+          "deprecated": "localStorage.clear() for logout",
+          "replacement": "Remove specific items",
+          "since": "Best practice",
+          "detection_regex": null,
+          "notes": "AI often uses localStorage.clear() for logout which wipes all stored data including preferences."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "document.onkeydown = function(e) {\n  if (e.keyCode === 13) { submit(); }\n};",
+          "good": "document.addEventListener('keydown', (e) => {\n  if (e.key === 'Enter') { submit(); }\n});",
+          "explanation": "keyCode is deprecated. Use the .key property which returns readable strings like 'Enter', 'Escape', etc."
+        }
+      ]
+    },
+
+    {
+      "id": "PLAUSIBLE_WRONG_LOGIC_009",
+      "category": "PLAUSIBLE_WRONG_LOGIC",
+      "severity": "high",
+      "description": "Environment and configuration mistakes AI commonly makes",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "env_config_analysis",
+        "targets": ["source files", "config files"],
+        "method": "Check for common environment variable and configuration mistakes."
+      },
+      "known_patterns": [
+        {
+          "id": "env_var_no_fallback",
+          "description": "Using environment variable without fallback or validation",
+          "detection_regex": "process\\.env\\.\\w+(?![?!])",
+          "confidence": 0.3,
+          "notes": "process.env values are always string | undefined. AI often uses them without checking if they exist."
+        },
+        {
+          "id": "env_var_boolean_check",
+          "description": "Checking environment variable as boolean (it's always a string)",
+          "detection_regex": "if\\s*\\(\\s*process\\.env\\.\\w+\\s*===?\\s*(?:true|false)\\s*\\)",
+          "confidence": 0.9,
+          "notes": "process.env.FOO === true is always false because env vars are strings. Check === 'true' instead."
+        },
+        {
+          "id": "env_var_number_comparison",
+          "description": "Comparing environment variable as number without parsing",
+          "detection_regex": "process\\.env\\.\\w+\\s*[<>]=?\\s*\\d",
+          "confidence": 0.8,
+          "notes": "Environment variables are strings. '10' > '9' is false (string comparison). Parse to number first."
+        },
+        {
+          "id": "client_side_env_var",
+          "description": "Accessing server-only environment variable on the client",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "In Next.js, only NEXT_PUBLIC_ prefixed env vars are available on the client. AI often uses server env vars in client components."
+        },
+        {
+          "id": "hardcoded_localhost",
+          "description": "Hardcoded localhost URL that won't work in production",
+          "detection_regex": "(?:http://localhost|http://127\\.0\\.0\\.1|http://0\\.0\\.0\\.0)(?::\\d+)?(?:/\\w+)",
+          "confidence": 0.7,
+          "notes": "AI often hardcodes localhost URLs for API endpoints instead of using environment variables."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "if (process.env.ENABLE_FEATURE === true) {\n  enableFeature();\n}",
+          "good": "if (process.env.ENABLE_FEATURE === 'true') {\n  enableFeature();\n}",
+          "explanation": "Environment variables are always strings. Comparing to boolean true always returns false. Compare to the string 'true'."
+        },
+        {
+          "bad": "const API_URL = 'http://localhost:3000/api';",
+          "good": "const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';",
+          "explanation": "Hardcoded localhost URLs break in any non-local environment. Use environment variables with localhost as the fallback."
+        }
+      ]
+    },
+
+    {
+      "id": "ASYNC_MISTAKES_001",
+      "category": "ASYNC_MISTAKES",
+      "severity": "high",
+      "description": "Incorrect async patterns that cause silent failures, data loss, or race conditions",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "async_pattern_analysis",
+        "targets": ["*.js", "*.ts", "*.jsx", "*.tsx"],
+        "method": "Analyze async function usage for patterns that violate JavaScript's concurrency model: await in forEach, missing await, incorrect parallelization, unguarded state updates, and improper cleanup in useEffect."
+      },
+      "heuristics": [
+        "await used inside .forEach() callback - forEach ignores the returned promise",
+        "async function called without await and return value used as resolved data",
+        "Promise.all used on operations that must execute in sequence (e.g., migrations, dependent API calls)",
+        "async function passed to useEffect without an inner IIFE or separate function, and without cleanup",
+        "Shared mutable variable updated from multiple concurrent async operations without guarding"
+      ],
+      "known_patterns": [
+        {
+          "id": "await_in_foreach",
+          "description": "Using await inside Array.forEach - the callback returns a promise that forEach discards, so the loop does not wait for completion",
+          "detection_regex": "\\.forEach\\(\\s*async\\s*\\(",
+          "confidence": 0.95,
+          "notes": "forEach returns void and ignores the promise returned by the async callback. Code after the forEach runs immediately. Use for...of for sequential execution or Promise.all(arr.map(...)) for parallel."
+        },
+        {
+          "id": "missing_await_on_async_call",
+          "description": "Calling an async function without await and using the return value as if it were resolved",
+          "detection_regex": null,
+          "confidence": 0.6,
+          "notes": "The return value is a Promise object, not the resolved value. Comparisons like 'if (fetchUser(id))' are always truthy because Promise objects are truthy. Assignments like 'const user = getUser(id)' store a Promise, not a User."
+        },
+        {
+          "id": "promise_all_dependent_operations",
+          "description": "Using Promise.all on operations that depend on each other's results or ordering",
+          "detection_regex": "Promise\\.all\\(",
+          "confidence": 0.3,
+          "notes": "Promise.all runs all promises concurrently. If operation B depends on operation A's result, or if operations must run in a specific order (e.g., database migrations, sequential API calls with side effects), use a for...of loop with await instead."
+        },
+        {
+          "id": "async_useeffect_no_cleanup",
+          "description": "Passing an async function directly to useEffect or performing async work in useEffect without cancellation on unmount",
+          "detection_regex": "useEffect\\(\\s*async\\s",
+          "confidence": 0.95,
+          "notes": "useEffect expects its callback to return void or a cleanup function. An async function returns a Promise, which useEffect cannot use as cleanup. Additionally, without an AbortController or cancelled flag, the async operation may try to update state on an unmounted component."
+        },
+        {
+          "id": "race_condition_state_update",
+          "description": "Unguarded state updates from async operations that can race against each other",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "When multiple async operations can update the same state (e.g., search-as-you-type, rapid button clicks), earlier requests that resolve later overwrite the results of newer requests. Use AbortController, request IDs, or debouncing to guard against this."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "items.forEach(async (item) => {\n  await processItem(item);\n});\nconsole.log('All items processed!');",
+          "good": "for (const item of items) {\n  await processItem(item);\n}\nconsole.log('All items processed!');\n\n// Or for parallel execution:\nawait Promise.all(items.map(item => processItem(item)));\nconsole.log('All items processed!');",
+          "explanation": "forEach does not await async callbacks. It fires all promises immediately and moves on. The console.log runs before any item is processed. Use for...of for sequential or Promise.all(arr.map(...)) for parallel."
+        },
+        {
+          "bad": "const user = getUser(userId);\nconsole.log(user.name);",
+          "good": "const user = await getUser(userId);\nconsole.log(user.name);",
+          "explanation": "getUser is async and returns a Promise. Without await, 'user' is a Promise object, and 'user.name' is undefined. The code silently produces wrong results without throwing."
+        },
+        {
+          "bad": "await Promise.all([\n  createUser(userData),\n  createProfile({ userId: newUser.id, ...profileData }),\n  sendWelcomeEmail(userData.email)\n]);",
+          "good": "const newUser = await createUser(userData);\nawait createProfile({ userId: newUser.id, ...profileData });\nawait sendWelcomeEmail(userData.email);",
+          "explanation": "createProfile depends on newUser.id from createUser, so they cannot run in parallel. Promise.all would start createProfile before createUser finishes, using an undefined userId."
+        },
+        {
+          "bad": "useEffect(async () => {\n  const data = await fetchData();\n  setData(data);\n}, []);",
+          "good": "useEffect(() => {\n  const controller = new AbortController();\n  async function load() {\n    try {\n      const data = await fetchData({ signal: controller.signal });\n      setData(data);\n    } catch (e) {\n      if (!controller.signal.aborted) throw e;\n    }\n  }\n  load();\n  return () => controller.abort();\n}, []);",
+          "explanation": "useEffect cannot accept an async function because it expects void or a cleanup function, not a Promise. Wrap async work in a named inner function, and provide cancellation via AbortController so unmounted components do not get state updates."
+        },
+        {
+          "bad": "function SearchResults({ query }) {\n  const [results, setResults] = useState([]);\n  useEffect(() => {\n    fetchResults(query).then(setResults);\n  }, [query]);\n  return <List items={results} />;\n}",
+          "good": "function SearchResults({ query }) {\n  const [results, setResults] = useState([]);\n  useEffect(() => {\n    let cancelled = false;\n    fetchResults(query).then(data => {\n      if (!cancelled) setResults(data);\n    });\n    return () => { cancelled = true; };\n  }, [query]);\n  return <List items={results} />;\n}",
+          "explanation": "Without a cancellation guard, if the user types fast and query changes rapidly, an older slower request can resolve after a newer one, overwriting correct results with stale data."
+        }
+      ]
+    },
+
+    {
+      "id": "REACT_MISTAKES_001",
+      "category": "REACT_MISTAKES",
+      "severity": "high",
+      "description": "Violations of React's rules and common misuse of React APIs that cause infinite loops, stale data, or runtime errors",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "react_pattern_analysis",
+        "targets": ["*.jsx", "*.tsx"],
+        "method": "Analyze React component code for hook rule violations, incorrect state management, Server/Client Component confusion, and unsafe rendering patterns."
+      },
+      "heuristics": [
+        "useState setter called directly in the render body (outside useEffect, event handler, or callback) causing infinite re-renders",
+        "useEffect with missing values in the dependency array that are referenced inside the effect body",
+        "Hooks called inside if/else blocks, loops, or early returns",
+        "Server Component (no 'use client' directive) using useState, useEffect, useRef, or other client hooks",
+        "List rendering with missing key prop or using array index as key when items can be reordered, inserted, or deleted",
+        "dangerouslySetInnerHTML used with dynamic user-provided content without sanitization"
+      ],
+      "known_patterns": [
+        {
+          "id": "setstate_during_render",
+          "description": "Calling a useState setter directly in the component body causes an infinite re-render loop",
+          "detection_regex": null,
+          "confidence": 0.85,
+          "notes": "When setState is called during render, React re-renders the component, which calls setState again, creating an infinite loop. Move state updates to useEffect, event handlers, or callbacks. The exception is the rare 'state update during render' pattern for derived state, which requires a conditional guard."
+        },
+        {
+          "id": "useeffect_missing_deps",
+          "description": "useEffect references values from the component scope but does not list them in the dependency array, causing stale closure bugs",
+          "detection_regex": null,
+          "confidence": 0.7,
+          "notes": "When a value referenced inside useEffect is not in the dependency array, the effect captures a stale snapshot of that value. The effect runs with outdated data even when the value changes. The exhaustive-deps ESLint rule catches this, but AI-generated code often has it disabled or ignored."
+        },
+        {
+          "id": "conditional_hooks",
+          "description": "Hooks called inside conditional blocks, loops, or after early returns",
+          "detection_regex": null,
+          "confidence": 0.9,
+          "notes": "React relies on hooks being called in the same order every render. Conditional hook calls change the order, corrupting the internal hook state. This causes unpredictable bugs and crashes. The 'Rules of Hooks' ESLint plugin catches this, but AI sometimes generates it when trying to optimize or handle edge cases."
+        },
+        {
+          "id": "server_component_client_hooks",
+          "description": "Using client-only hooks (useState, useEffect, useRef, useContext, etc.) in a Server Component",
+          "detection_regex": null,
+          "confidence": 0.85,
+          "notes": "In Next.js App Router, components without 'use client' are Server Components by default. Server Components run on the server and cannot use React hooks that depend on client-side state or lifecycle. This causes a build error. Add 'use client' at the top of the file, or extract the interactive part into a separate Client Component."
+        },
+        {
+          "id": "missing_key_prop",
+          "description": "List items rendered with .map() without a key prop, or using the array index as key when items can be reordered",
+          "detection_regex": "\\.map\\([^)]*=>\\s*<(?!.*\\bkey\\b)",
+          "confidence": 0.6,
+          "notes": "Missing keys cause React to re-mount all items on every change. Index keys cause React to associate state with the wrong items when the list is reordered, filtered, or items are inserted/removed. Use a stable unique ID from the data."
+        },
+        {
+          "id": "dangerous_innerhtml_dynamic",
+          "description": "Using dangerouslySetInnerHTML with content that includes user input or dynamic data without sanitization",
+          "detection_regex": "dangerouslySetInnerHTML\\s*=\\s*\\{\\{\\s*__html:\\s*(?!['\"<])",
+          "confidence": 0.7,
+          "severity_override": "critical",
+          "notes": "dangerouslySetInnerHTML renders raw HTML. If the content includes user input, attackers can inject scripts (XSS). Always sanitize with a library like DOMPurify before rendering. If the content is a static string literal, it is safe."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "function Counter() {\n  const [count, setCount] = useState(0);\n  setCount(count + 1); // called during render\n  return <div>{count}</div>;\n}",
+          "good": "function Counter() {\n  const [count, setCount] = useState(0);\n  return (\n    <div>\n      <span>{count}</span>\n      <button onClick={() => setCount(c => c + 1)}>+</button>\n    </div>\n  );\n}",
+          "explanation": "Calling setCount during render triggers a re-render, which calls setCount again, creating an infinite loop. Move state updates to event handlers or useEffect."
+        },
+        {
+          "bad": "function UserProfile({ userId }) {\n  const [user, setUser] = useState(null);\n  useEffect(() => {\n    fetchUser(userId).then(setUser);\n  }, []); // missing userId in deps\n  return <div>{user?.name}</div>;\n}",
+          "good": "function UserProfile({ userId }) {\n  const [user, setUser] = useState(null);\n  useEffect(() => {\n    fetchUser(userId).then(setUser);\n  }, [userId]);\n  return <div>{user?.name}</div>;\n}",
+          "explanation": "The effect uses userId but does not list it in the dependency array. When userId changes (e.g., navigating to a different user), the effect does not re-run, and the component displays stale data from the previous user."
+        },
+        {
+          "bad": "function Form({ showExtra }) {\n  const [name, setName] = useState('');\n  if (showExtra) {\n    const [extra, setExtra] = useState('');\n  }\n  return <input value={name} onChange={e => setName(e.target.value)} />;\n}",
+          "good": "function Form({ showExtra }) {\n  const [name, setName] = useState('');\n  const [extra, setExtra] = useState('');\n  return (\n    <>\n      <input value={name} onChange={e => setName(e.target.value)} />\n      {showExtra && <input value={extra} onChange={e => setExtra(e.target.value)} />}\n    </>\n  );\n}",
+          "explanation": "Hooks must be called in the same order every render. When showExtra changes from true to false, the hook call order changes, corrupting React's internal state for all subsequent hooks."
+        },
+        {
+          "bad": "// app/components/counter.tsx (no 'use client')\nimport { useState } from 'react';\nexport default function Counter() {\n  const [count, setCount] = useState(0);\n  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;\n}",
+          "good": "'use client';\nimport { useState } from 'react';\nexport default function Counter() {\n  const [count, setCount] = useState(0);\n  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;\n}",
+          "explanation": "In Next.js App Router, components without 'use client' are Server Components and cannot use useState or other client hooks. Add 'use client' at the top of any component that needs interactivity."
+        },
+        {
+          "bad": "function TodoList({ todos }) {\n  return (\n    <ul>\n      {todos.map((todo, index) => (\n        <li key={index}>{todo.text}</li>\n      ))}\n    </ul>\n  );\n}",
+          "good": "function TodoList({ todos }) {\n  return (\n    <ul>\n      {todos.map(todo => (\n        <li key={todo.id}>{todo.text}</li>\n      ))}\n    </ul>\n  );\n}",
+          "explanation": "Using array index as key causes React to associate component state with the wrong items when todos are reordered, deleted, or inserted. A todo's checkbox state would appear on a different todo. Use a stable unique ID from the data."
+        },
+        {
+          "bad": "function Comment({ htmlContent }) {\n  return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;\n}",
+          "good": "import DOMPurify from 'dompurify';\nfunction Comment({ htmlContent }) {\n  const clean = DOMPurify.sanitize(htmlContent);\n  return <div dangerouslySetInnerHTML={{ __html: clean }} />;\n}",
+          "explanation": "If htmlContent comes from user input or an API, it can contain script tags or event handlers that execute arbitrary JavaScript (XSS). Always sanitize with DOMPurify or a similar library."
+        }
+      ]
+    },
+
+    {
+      "id": "NEXTJS_MISTAKES_001",
+      "category": "NEXTJS_MISTAKES",
+      "severity": "high",
+      "description": "Common Next.js mistakes where AI confuses router paradigms, uses wrong imports, or misses version-specific API changes",
+      "languages": ["javascript", "typescript"],
+      "detection_strategy": {
+        "type": "nextjs_pattern_analysis",
+        "targets": ["*.jsx", "*.tsx", "*.js", "*.ts"],
+        "method": "Detect Pages Router patterns used in App Router files, wrong router imports, synchronous usage of async request APIs in Next.js 15+, unnecessary client-side data fetching in Server Components, and missing 'use client' directives."
+      },
+      "heuristics": [
+        "getServerSideProps, getStaticProps, or getStaticPaths exported from a file inside the app/ directory",
+        "useRouter imported from next/router in a file inside the app/ directory",
+        "cookies(), headers(), or draftMode() called without await in a Next.js 15+ project",
+        "Client-side data fetching hooks (useEffect + fetch, useSWR, useQuery) used in a Server Component when server-side fetch would suffice",
+        "Component using useState, useEffect, or other client hooks but missing the 'use client' directive at the top of the file"
+      ],
+      "known_patterns": [
+        {
+          "id": "pages_router_in_app_dir",
+          "description": "Using Pages Router data fetching functions (getServerSideProps, getStaticProps, getStaticPaths) in the app/ directory",
+          "detection_regex": "export\\s+(?:async\\s+)?function\\s+(?:getServerSideProps|getStaticProps|getStaticPaths)",
+          "confidence": 0.9,
+          "context_check": "Only flag if the file path contains /app/. These exports are valid in /pages/.",
+          "notes": "In the App Router, data fetching is done directly in the Server Component body using async/await or via generateStaticParams. The Pages Router export functions are silently ignored in app/ -- they do not cause a build error but they do not work either, causing confusing behavior."
+        },
+        {
+          "id": "wrong_userouter_import",
+          "description": "Importing useRouter from next/router instead of next/navigation in App Router files",
+          "detection_regex": "import\\s+.*useRouter.*from\\s+['\"]next/router['\"]",
+          "confidence": 0.9,
+          "context_check": "Only flag if the file path contains /app/. next/router is correct in /pages/.",
+          "notes": "next/router's useRouter has .query, .asPath, .pathname, etc. next/navigation's useRouter only has push, replace, back, forward, refresh, and prefetch. Using the wrong import causes runtime errors or missing properties."
+        },
+        {
+          "id": "sync_cookies_headers_nextjs15",
+          "description": "Calling cookies(), headers(), or draftMode() without await in Next.js 15+",
+          "detection_regex": "(?:const|let|var)\\s+\\w+\\s*=\\s*(?:cookies|headers|draftMode)\\(\\)",
+          "confidence": 0.85,
+          "context_check": "Check the next version in package.json. Only flag if version >= 15.",
+          "notes": "In Next.js 15, cookies(), headers(), and draftMode() became async and return Promises. Calling them without await returns a Promise object instead of the actual cookies/headers. This is a breaking change from Next.js 14. Code like 'const cookieStore = cookies()' must become 'const cookieStore = await cookies()'."
+        },
+        {
+          "id": "client_fetch_in_server_component",
+          "description": "Using client-side data fetching (useEffect + fetch, useSWR, useQuery) in a Server Component when server-side fetch would be simpler and faster",
+          "detection_regex": null,
+          "confidence": 0.6,
+          "notes": "Server Components can fetch data directly with async/await in the component body. Using useEffect + fetch or data fetching hooks adds unnecessary client-side JavaScript, causes loading states, and prevents streaming. This is not a bug but a significant anti-pattern that degrades performance and UX."
+        },
+        {
+          "id": "missing_use_client",
+          "description": "Component file uses client-only hooks or browser APIs but is missing the 'use client' directive",
+          "detection_regex": null,
+          "confidence": 0.8,
+          "notes": "In the App Router, all components are Server Components by default. If a component uses useState, useEffect, useRef, useContext, onClick handlers, or browser APIs like window/document, it must have 'use client' at the top. Missing this directive causes a build error with a message about hooks not being available in Server Components."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "// app/users/page.tsx\nexport async function getServerSideProps() {\n  const users = await fetch('/api/users').then(r => r.json());\n  return { props: { users } };\n}\nexport default function UsersPage({ users }) {\n  return <UserList users={users} />;\n}",
+          "good": "// app/users/page.tsx\nexport default async function UsersPage() {\n  const users = await fetch('https://api.example.com/users').then(r => r.json());\n  return <UserList users={users} />;\n}",
+          "explanation": "getServerSideProps is a Pages Router pattern and does not work in the App Router. In App Router, Server Components are async by default -- just fetch data directly in the component body."
+        },
+        {
+          "bad": "// app/dashboard/layout.tsx\nimport { useRouter } from 'next/router';\nexport default function DashboardLayout({ children }) {\n  const router = useRouter();\n  const { id } = router.query;\n  return <div>{children}</div>;\n}",
+          "good": "// app/dashboard/layout.tsx\n'use client';\nimport { useRouter, useSearchParams } from 'next/navigation';\nexport default function DashboardLayout({ children }) {\n  const router = useRouter();\n  const searchParams = useSearchParams();\n  const id = searchParams.get('id');\n  return <div>{children}</div>;\n}",
+          "explanation": "In the App Router, useRouter must be imported from next/navigation, not next/router. The next/navigation version has no .query property. Use useSearchParams() for query parameters or useParams() for dynamic route segments."
+        },
+        {
+          "bad": "// app/api/settings/route.ts (Next.js 15+)\nimport { cookies } from 'next/headers';\nexport async function GET() {\n  const cookieStore = cookies();\n  const theme = cookieStore.get('theme');\n  return Response.json({ theme });\n}",
+          "good": "// app/api/settings/route.ts (Next.js 15+)\nimport { cookies } from 'next/headers';\nexport async function GET() {\n  const cookieStore = await cookies();\n  const theme = cookieStore.get('theme');\n  return Response.json({ theme });\n}",
+          "explanation": "In Next.js 15, cookies() is async and returns a Promise. Without await, cookieStore is a Promise object, and .get('theme') returns undefined. This is a breaking change from Next.js 14 where cookies() was synchronous."
+        },
+        {
+          "bad": "// app/products/page.tsx (Server Component)\n'use client';\nimport { useState, useEffect } from 'react';\nexport default function ProductsPage() {\n  const [products, setProducts] = useState([]);\n  useEffect(() => {\n    fetch('/api/products').then(r => r.json()).then(setProducts);\n  }, []);\n  return <ProductList products={products} />;\n}",
+          "good": "// app/products/page.tsx (Server Component)\nexport default async function ProductsPage() {\n  const products = await fetch('https://api.example.com/products').then(r => r.json());\n  return <ProductList products={products} />;\n}",
+          "explanation": "This page does not need any client-side interactivity -- it just fetches and displays data. As a Server Component, it can fetch data directly with async/await, avoiding the client-side JavaScript bundle, loading states, and the waterfall of client-server round trips."
+        },
+        {
+          "bad": "// app/components/theme-toggle.tsx\nimport { useState } from 'react';\nexport default function ThemeToggle() {\n  const [dark, setDark] = useState(false);\n  return <button onClick={() => setDark(!dark)}>{dark ? 'Light' : 'Dark'}</button>;\n}",
+          "good": "// app/components/theme-toggle.tsx\n'use client';\nimport { useState } from 'react';\nexport default function ThemeToggle() {\n  const [dark, setDark] = useState(false);\n  return <button onClick={() => setDark(!dark)}>{dark ? 'Light' : 'Dark'}</button>;\n}",
+          "explanation": "This component uses useState and onClick, which require client-side JavaScript. Without 'use client' at the top, Next.js treats it as a Server Component and the build fails with an error about hooks not being available."
+        }
+      ]
+    },
+
+    {
+      "id": "DATABASE_MISTAKES_001",
+      "category": "DATABASE_MISTAKES",
+      "severity": "high",
+      "description": "Database access anti-patterns that cause performance issues, data corruption, or security vulnerabilities",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "database_pattern_analysis",
+        "targets": ["*.js", "*.ts", "*.jsx", "*.tsx", "*.py"],
+        "method": "Analyze database query patterns for N+1 loops, raw SQL with string interpolation, missing transactions for multi-step operations, non-deterministic findFirst queries, and missing connection pool configuration."
+      },
+      "heuristics": [
+        "Database query inside a for/forEach/map loop (N+1 pattern)",
+        "SQL query string built with template literals or string concatenation containing user input",
+        "Multiple related database writes (create + update, transfer between accounts) without a transaction",
+        "Prisma findFirst without a unique constraint or orderBy clause, giving non-deterministic results",
+        "Database client created without explicit connection pool size, timeout, or retry configuration"
+      ],
+      "known_patterns": [
+        {
+          "id": "n_plus_one_query",
+          "description": "Database query executed inside a loop, causing N+1 queries instead of a single batched query",
+          "detection_regex": "(?:for\\s*\\(|forEach\\(|map\\()[^)]*\\{[\\s\\S]*?(?:prisma|mongoose|knex|pool|client|db|Model)\\.\\w+\\(",
+          "confidence": 0.75,
+          "notes": "For N items, this executes N+1 queries (1 to fetch the list, N to fetch related data). Causes severe performance degradation as N grows. Use include/join/eager loading, or batch queries with IN clauses."
+        },
+        {
+          "id": "sql_injection_template_literal",
+          "description": "SQL query built with template literals that interpolate user-controlled values",
+          "detection_regex": "(?:query|execute|raw|sql|\\$queryRaw|\\$executeRaw)\\s*(?:\\(\\s*)?`[^`]*\\$\\{",
+          "confidence": 0.85,
+          "severity_override": "critical",
+          "notes": "Template literals in SQL queries allow attackers to inject arbitrary SQL. Use parameterized queries ($1, ?, :param), tagged template literals (Prisma's Prisma.sql`...`), or query builder methods that handle escaping."
+        },
+        {
+          "id": "missing_transaction",
+          "description": "Multiple related database writes that should be atomic but are executed independently",
+          "detection_regex": null,
+          "confidence": 0.5,
+          "notes": "If any write in a multi-step sequence fails, the database is left in an inconsistent state. Examples: transferring money between accounts (debit + credit), creating a user and their profile, updating inventory and creating an order. Use database transactions to ensure all-or-nothing semantics."
+        },
+        {
+          "id": "prisma_findfirst_no_order",
+          "description": "Using Prisma findFirst without a unique constraint in the where clause and without an orderBy, giving non-deterministic results",
+          "detection_regex": "findFirst\\(\\s*\\{[^}]*where:",
+          "confidence": 0.6,
+          "notes": "findFirst returns the first matching record, but without orderBy the 'first' record is database-engine-dependent and non-deterministic. If you expect exactly one result, use findUnique with a unique field. If you want the latest or earliest, add orderBy."
+        },
+        {
+          "id": "missing_connection_pool_config",
+          "description": "Database client or pool created without configuring connection limits, timeouts, or idle settings",
+          "detection_regex": null,
+          "confidence": 0.4,
+          "notes": "Default connection pool settings are rarely appropriate for production. Without limits, the application can exhaust database connections under load. Without timeouts, queries can hang indefinitely. Without idle settings, connections are leaked. Set pool size, connection timeout, idle timeout, and maximum lifetime."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "const users = await prisma.user.findMany();\nconst usersWithPosts = [];\nfor (const user of users) {\n  const posts = await prisma.post.findMany({ where: { authorId: user.id } });\n  usersWithPosts.push({ ...user, posts });\n}",
+          "good": "const usersWithPosts = await prisma.user.findMany({\n  include: { posts: true }\n});",
+          "explanation": "The bad example executes N+1 queries: 1 for all users, then 1 per user for their posts. With 100 users, that is 101 database round trips. The good example uses a single query with an include (JOIN) to fetch everything at once."
+        },
+        {
+          "bad": "const userId = req.params.id;\nconst user = await db.query(`SELECT * FROM users WHERE id = '${userId}'`);",
+          "good": "const userId = req.params.id;\nconst user = await db.query('SELECT * FROM users WHERE id = $1', [userId]);",
+          "explanation": "Interpolating userId directly into the SQL string allows SQL injection. If userId is \"'; DROP TABLE users; --\", the table is deleted. Parameterized queries send the value separately from the query string, preventing injection."
+        },
+        {
+          "bad": "// Transfer money between accounts\nawait prisma.account.update({\n  where: { id: fromId },\n  data: { balance: { decrement: amount } }\n});\nawait prisma.account.update({\n  where: { id: toId },\n  data: { balance: { increment: amount } }\n});",
+          "good": "// Transfer money between accounts\nawait prisma.$transaction([\n  prisma.account.update({\n    where: { id: fromId },\n    data: { balance: { decrement: amount } }\n  }),\n  prisma.account.update({\n    where: { id: toId },\n    data: { balance: { increment: amount } }\n  })\n]);",
+          "explanation": "Without a transaction, if the second update fails (e.g., network error), money is deducted from the sender but never added to the receiver. A transaction ensures both operations succeed or both are rolled back."
+        },
+        {
+          "bad": "const latestOrder = await prisma.order.findFirst({\n  where: { userId: user.id, status: 'pending' }\n});",
+          "good": "const latestOrder = await prisma.order.findFirst({\n  where: { userId: user.id, status: 'pending' },\n  orderBy: { createdAt: 'desc' }\n});",
+          "explanation": "Without orderBy, findFirst returns whichever record the database engine happens to find first, which can vary between executions, replicas, or after vacuuming. If you want the latest pending order, specify orderBy."
+        },
+        {
+          "bad": "const pool = new Pool({\n  connectionString: process.env.DATABASE_URL\n});",
+          "good": "const pool = new Pool({\n  connectionString: process.env.DATABASE_URL,\n  max: 20,\n  idleTimeoutMillis: 30000,\n  connectionTimeoutMillis: 5000\n});",
+          "explanation": "Without pool configuration, the default max connections (usually 10) may be too low for production, and there are no timeouts to recover from hung connections. Configure max pool size based on your database plan and expected concurrency."
+        }
+      ]
+    },
+
+    {
+      "id": "API_MISTAKES_001",
+      "category": "API_MISTAKES",
+      "severity": "medium",
+      "description": "HTTP API design anti-patterns that cause integration issues, security vulnerabilities, and scalability problems",
+      "languages": ["javascript", "typescript", "python"],
+      "detection_strategy": {
+        "type": "api_pattern_analysis",
+        "targets": ["*.js", "*.ts", "*.py", "route.ts", "route.js"],
+        "method": "Analyze API route handlers for incorrect status codes, missing headers, sensitive data exposure, missing pagination, and missing rate limiting."
+      },
+      "heuristics": [
+        "Error responses sent with HTTP 200 status code instead of appropriate 4xx/5xx codes",
+        "Response missing Content-Type header or sending JSON without application/json",
+        "Sensitive data (tokens, passwords, secrets) included in URL query parameters instead of request body or headers",
+        "List endpoint that returns all records without limit/offset or cursor-based pagination",
+        "Public-facing endpoint without rate limiting, allowing abuse and denial of service"
+      ],
+      "known_patterns": [
+        {
+          "id": "200_for_errors",
+          "description": "Returning HTTP 200 OK for error responses, with the error encoded in the response body",
+          "detection_regex": "(?:res\\.json|Response\\.json|JsonResponse)\\(\\s*\\{[^}]*(?:error|message|success:\\s*false)",
+          "confidence": 0.5,
+          "notes": "AI often returns { success: false, error: 'message' } with a 200 status. This breaks standard HTTP client error handling, caching, and monitoring. Use 400 for client errors, 401 for authentication failures, 403 for authorization failures, 404 for missing resources, 409 for conflicts, and 500 for server errors."
+        },
+        {
+          "id": "missing_content_type",
+          "description": "API response missing Content-Type header, causing clients to guess the response format",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "Most frameworks set Content-Type automatically when using .json() or equivalent, but manual response construction (new Response, res.send with a string) may omit it. Missing Content-Type can cause parsing failures in strict HTTP clients."
+        },
+        {
+          "id": "sensitive_data_in_url",
+          "description": "Tokens, passwords, API keys, or other sensitive data passed as URL query parameters",
+          "detection_regex": "(?:token|password|secret|apiKey|api_key|auth|credential)\\s*[:=]\\s*(?:req\\.query|request\\.query|searchParams\\.get|params\\.get)",
+          "confidence": 0.7,
+          "severity_override": "high",
+          "notes": "URL parameters are logged in server access logs, browser history, referrer headers, and proxy logs. Sensitive data must be sent in the request body (POST) or Authorization header. This applies to both API-to-API communication and user-facing endpoints."
+        },
+        {
+          "id": "missing_pagination",
+          "description": "List endpoint that returns all matching records without pagination, causing memory and performance issues at scale",
+          "detection_regex": "(?:findMany|find|select|query)\\((?![^)]*(?:limit|take|skip|offset|cursor|page|per_page|pageSize))",
+          "confidence": 0.4,
+          "notes": "Without pagination, a list endpoint loads all records into memory. With 10 records in development this works fine; with 10 million in production it crashes the server. Always add limit/offset (offset-based) or cursor (cursor-based) pagination."
+        },
+        {
+          "id": "missing_rate_limiting",
+          "description": "Public-facing API endpoint without rate limiting, allowing abuse",
+          "detection_regex": null,
+          "confidence": 0.3,
+          "notes": "Endpoints like login, signup, password reset, and public APIs should have rate limiting to prevent brute force attacks, credential stuffing, and denial of service. AI rarely adds rate limiting because it is typically middleware-level infrastructure. Check if the project has a global rate limiter before flagging individual endpoints."
+        }
+      ],
+      "examples": [
+        {
+          "bad": "app.post('/api/login', async (req, res) => {\n  const user = await findUser(req.body.email);\n  if (!user) {\n    return res.json({ success: false, error: 'User not found' });\n  }\n  res.json({ success: true, user });\n});",
+          "good": "app.post('/api/login', async (req, res) => {\n  const user = await findUser(req.body.email);\n  if (!user) {\n    return res.status(404).json({ error: 'User not found' });\n  }\n  res.json(user);\n});",
+          "explanation": "Returning 200 with { success: false } means HTTP clients, load balancers, and monitoring tools treat the error as a successful response. Use proper HTTP status codes so the entire stack understands the response semantics."
+        },
+        {
+          "bad": "app.get('/api/reset-password', async (req, res) => {\n  const { token, newPassword } = req.query;\n  await resetPassword(token, newPassword);\n  res.json({ success: true });\n});",
+          "good": "app.post('/api/reset-password', async (req, res) => {\n  const { token, newPassword } = req.body;\n  await resetPassword(token, newPassword);\n  res.json({ success: true });\n});",
+          "explanation": "The token and new password are in URL query parameters, which are logged in server access logs, browser history, and referrer headers. Sensitive data must be sent in the request body via POST. Also note the method change from GET to POST -- password reset is a state-changing operation."
+        },
+        {
+          "bad": "app.get('/api/users', async (req, res) => {\n  const users = await prisma.user.findMany();\n  res.json(users);\n});",
+          "good": "app.get('/api/users', async (req, res) => {\n  const page = parseInt(req.query.page) || 1;\n  const limit = Math.min(parseInt(req.query.limit) || 20, 100);\n  const skip = (page - 1) * limit;\n  const [users, total] = await Promise.all([\n    prisma.user.findMany({ skip, take: limit, orderBy: { createdAt: 'desc' } }),\n    prisma.user.count()\n  ]);\n  res.json({\n    data: users,\n    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }\n  });\n});",
+          "explanation": "Without pagination, this endpoint loads ALL users into memory and sends them in a single response. With millions of users this exhausts server memory and produces an unusably large response. Always paginate list endpoints with a capped limit."
+        },
+        {
+          "bad": "// No rate limiting on login endpoint\napp.post('/api/login', async (req, res) => {\n  const { email, password } = req.body;\n  const user = await authenticate(email, password);\n  if (!user) return res.status(401).json({ error: 'Invalid credentials' });\n  const token = generateToken(user);\n  res.json({ token });\n});",
+          "good": "import rateLimit from 'express-rate-limit';\nconst loginLimiter = rateLimit({\n  windowMs: 15 * 60 * 1000,\n  max: 10,\n  message: { error: 'Too many login attempts, please try again later' }\n});\napp.post('/api/login', loginLimiter, async (req, res) => {\n  const { email, password } = req.body;\n  const user = await authenticate(email, password);\n  if (!user) return res.status(401).json({ error: 'Invalid credentials' });\n  const token = generateToken(user);\n  res.json({ token });\n});",
+          "explanation": "Without rate limiting, attackers can brute-force passwords by making thousands of login attempts per second. A rate limiter (10 attempts per 15 minutes) stops brute force while allowing legitimate users to retry after typos."
+        },
+        {
+          "bad": "export async function GET(request) {\n  const url = new URL(request.url);\n  const apiKey = url.searchParams.get('key');\n  if (apiKey !== process.env.API_SECRET) {\n    return Response.json({ error: 'Unauthorized' });\n  }\n  return Response.json({ data: 'sensitive' });\n}",
+          "good": "export async function GET(request) {\n  const apiKey = request.headers.get('Authorization')?.replace('Bearer ', '');\n  if (apiKey !== process.env.API_SECRET) {\n    return Response.json({ error: 'Unauthorized' }, { status: 401 });\n  }\n  return Response.json({ data: 'sensitive' });\n}",
+          "explanation": "Two issues: the API key is in URL parameters (logged everywhere), and the unauthorized response returns 200. Move the key to the Authorization header and return 401 for authentication failures."
+        }
+      ]
+    }
+  ],
+
+  "meta": {
+    "total_patterns": 31,
+    "total_known_npm_hallucinations": 37,
+    "total_known_pypi_hallucinations": 20,
+    "total_known_api_hallucinations": 46,
+    "total_deprecated_apis": 52,
+    "total_logic_patterns": 35,
+    "total_type_patterns": 14,
+    "total_error_handling_patterns": 19,
+    "total_async_patterns": 5,
+    "total_react_patterns": 6,
+    "total_nextjs_patterns": 5,
+    "total_database_patterns": 5,
+    "total_api_patterns": 5,
+    "coverage": {
+      "languages": ["javascript", "typescript", "python", "css", "html"],
+      "frameworks": ["react", "next.js", "express", "fastify", "nestjs", "fastapi", "flask", "django"],
+      "categories": ["PHANTOM_PACKAGE", "HALLUCINATED_API", "PLAUSIBLE_WRONG_LOGIC", "DEPRECATED_API", "CONFIDENT_WRONG_TYPES", "MISSING_ERROR_HANDLING", "ASYNC_MISTAKES", "REACT_MISTAKES", "NEXTJS_MISTAKES", "DATABASE_MISTAKES", "API_MISTAKES"]
+    },
+    "usage_notes": {
+      "detection_regex_language": "Most detection_regex patterns use JavaScript regex syntax. Python consumers should adapt escaping as needed.",
+      "confidence_scores": "Confidence scores (0.0-1.0) indicate how likely a regex match is to be a true positive. Lower scores indicate more false positives and may need additional context.",
+      "severity_override": "Some individual patterns have a severity_override that supersedes their category's default severity.",
+      "context_sensitive": "Many patterns are context-sensitive. For example, getServerSideProps is only deprecated in the app/ directory, not in pages/. Detection tools should account for file location and project configuration."
+    }
+  }
+}

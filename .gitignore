@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+*.log
+.env*
+.claude/preflight/memory.json
+tmp/
+dist/
+
+# Do not ignore plugin config and rules
+!.claude-plugin/
+!.claude/rules/

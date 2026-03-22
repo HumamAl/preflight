@@ -1,0 +1,272 @@
+{
+  "$schema": "https://preflight.dev/schemas/false-positive-mitigations-v1.json",
+  "version": "1.0.0",
+  "generated": "2026-03-22",
+  "description": "Comprehensive catalog of false positive scenarios for each preflight detection category, with concrete mitigation strategies and detection commands. Every mitigation should be checked BEFORE reporting a finding to reduce false positives.",
+  "mitigations": [
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is provided by a monorepo workspace dependency (hoisted or symlinked from a sibling package)",
+      "mitigation": "Walk up the directory tree and check every package.json from the current package to the git root. Also check for workspaces field, pnpm-workspace.yaml, and lerna.json. If any workspace root declares the package, it is not phantom.",
+      "detection_command": "git rev-parse --show-toplevel && find $(git rev-parse --show-toplevel) -name package.json -maxdepth 4 | xargs grep -l '<package>'"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is installed globally (e.g., typescript, eslint, prettier) and intentionally referenced without a local install",
+      "mitigation": "Check for globally installed packages with npm ls -g --depth=0 or which <binary>. If found globally AND the project uses it as a CLI tool (not a library import), suppress the finding. Global packages used as programmatic imports should still be flagged.",
+      "detection_command": "npm ls -g --depth=0 2>/dev/null | grep '<package>'"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is a devDependency in a different package.json within the same repo (e.g., test utilities in a tools/ directory)",
+      "mitigation": "Search all package.json files in the repo for the package name. If found in any package.json within the repo, check whether the current file could resolve it through workspace linking or tsconfig paths.",
+      "detection_command": "find $(git rev-parse --show-toplevel) -name package.json -not -path '*/node_modules/*' | xargs grep -l '<package>'"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is a tsconfig path alias or webpack/vite resolve alias that maps to a local directory",
+      "mitigation": "Read tsconfig.json paths, webpack.config resolve.alias, vite.config resolve.alias, and jest moduleNameMapper. If the import matches a configured alias, it is not a phantom package.",
+      "detection_command": "grep -r '<package>' tsconfig.json vite.config.* webpack.config.* jest.config.* 2>/dev/null"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package import uses a subpath export (e.g., 'zod/v4') that does not match the top-level package name exactly",
+      "mitigation": "Strip the import path to its root package name (first segment, or first two segments for scoped packages). Check whether that root package is installed. For subpath exports, verify the exports field in the installed package's package.json to confirm the subpath is valid.",
+      "detection_command": "grep '\"exports\"' node_modules/<root-package>/package.json"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Python package has a different import name than its pip name (e.g., import cv2 but pip install opencv-python)",
+      "mitigation": "Consult the phantom-packages.json mapping for known pip-name vs import-name mismatches (sklearn/scikit-learn, cv2/opencv-python, PIL/Pillow, yaml/PyYAML, etc.). If the import name maps to a known pip package that IS installed, suppress the finding.",
+      "detection_command": "pip show <pip-name> 2>/dev/null || grep '<pip-name>' requirements.txt pyproject.toml 2>/dev/null"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is a Node.js built-in module that was recently added (e.g., node:test in Node 18+, node:sqlite in Node 22+)",
+      "mitigation": "Check the project's Node.js version from .nvmrc, .node-version, package.json engines, or Dockerfile. Maintain a list of built-in modules per Node version. If the module is built-in for the project's target version, suppress the finding.",
+      "detection_command": "node -e \"try { require.resolve('<module>'); console.log('built-in') } catch { console.log('not built-in') }\""
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is declared in the lockfile but not in package.json because it is a transitive dependency being deep-imported",
+      "mitigation": "Check package-lock.json, yarn.lock, or pnpm-lock.yaml for the package. If present as a transitive dependency, lower confidence but still flag because deep imports of transitive dependencies are fragile. Change severity from CRITICAL to MEDIUM.",
+      "detection_command": "grep '<package>' package-lock.json yarn.lock pnpm-lock.yaml 2>/dev/null"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is a peer dependency that will be provided by the consuming project (common in library/plugin development)",
+      "mitigation": "Check peerDependencies in the current package.json. If the package is listed as a peer dependency, it is expected to be absent from node_modules during development unless also listed in devDependencies. Suppress the finding for files in library source code.",
+      "detection_command": "grep -A 20 '\"peerDependencies\"' package.json | grep '<package>'"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method exists but only in a newer version of the library than what preflight's knowledge covers",
+      "mitigation": "Always check the INSTALLED version's type definitions in node_modules rather than relying on static knowledge. Read node_modules/<pkg>/package.json for the version, then grep the actual .d.ts files for the method.",
+      "detection_command": "grep -r '<method>' node_modules/<package>/dist/*.d.ts node_modules/@types/<package>/*.d.ts 2>/dev/null"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method is added by a polyfill (e.g., core-js adds Array.prototype.groupBy, or a global fetch polyfill)",
+      "mitigation": "Search for polyfill imports in the project's entry point files (index.ts, main.ts, _app.tsx, setup files). Check for core-js, regenerator-runtime, whatwg-fetch, or custom polyfill files. If a polyfill provides the API, suppress the finding.",
+      "detection_command": "grep -rn 'core-js\\|polyfill\\|whatwg-fetch\\|regenerator-runtime' src/index.* src/main.* src/setup.* 2>/dev/null"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method is provided by a plugin, extension, or monkey-patch (e.g., Prisma extensions, Mongoose plugins, Express middleware that decorates req/res)",
+      "mitigation": "Search the codebase for plugin registrations, middleware declarations, and type augmentations (declare module). If a plugin adds the method to the type, suppress the finding.",
+      "detection_command": "grep -rn 'declare module\\|plugin(\\|extend(\\|decorate(' src/ types/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method exists on a subclass or derived type, but preflight checked the base type definition",
+      "mitigation": "Trace the full type chain. If the variable's type is a subclass or an interface that extends the base, check all ancestors and descendants. Read the full class hierarchy before concluding a method does not exist.",
+      "detection_command": "grep -rn 'extends <BaseType>\\|implements <BaseType>' src/ node_modules/<package>/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method is a TypeScript declaration merge (module augmentation) adding types to a third-party package",
+      "mitigation": "Search for .d.ts files in the project's types/ or src/ directories that augment the third-party module. Declaration merging can add methods that do not appear in the library's own type definitions.",
+      "detection_command": "grep -rn 'declare module.*<package>' src/ types/ *.d.ts 2>/dev/null"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "API exists but under a different export path in the same package (e.g., 'next/headers' vs 'next/server')",
+      "mitigation": "Before flagging a non-existent export, search other common export paths within the same package. Check the package's exports field in its package.json for all available subpath exports.",
+      "detection_command": "grep -r 'export.*<name>' node_modules/<package>/ --include='*.d.ts' 2>/dev/null | head -10"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method is accessed dynamically or via bracket notation and appears non-existent in static analysis",
+      "mitigation": "If the method call is on a dynamic/generic type (Record, any, unknown), or accessed via bracket notation obj[methodName](), lower confidence significantly. Dynamic dispatch is intentional and cannot be statically verified.",
+      "detection_command": "grep -n '\\[.*\\](' <file> | head -5"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Inverted condition is intentional deny-by-default pattern (e.g., if (!isAdmin) return 403 -- the block DENIES access to non-admins)",
+      "mitigation": "Read the full function body, not just the condition. Check what happens in the if-branch AND the else/fall-through branch. If the if-branch returns an error/rejection/403 and the fall-through grants access, the inverted condition is a correct deny-by-default guard clause.",
+      "detection_command": "Read the surrounding 10 lines of the flagged condition to verify what each branch does"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "<= length is correct for 1-indexed data (database row numbers, Lua-style arrays, paginated results starting at page 1)",
+      "mitigation": "Check whether the data source uses 0-indexed or 1-indexed values. Database ROW_NUMBER(), SQL OFFSET-based pagination, and some API responses use 1-based indexing where <= length is correct. Examine the loop variable's initialization value to determine the indexing scheme.",
+      "detection_command": "Check the loop's initialization (i = 0 vs i = 1) and what data structure it iterates over"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Arguments appear swapped but the function uses named parameters or an options object, making order irrelevant",
+      "mitigation": "Read the function signature. If it accepts a single options/config object ({ width, height }) rather than positional parameters, argument order does not matter because destructuring is used. Only flag swapped positional arguments.",
+      "detection_command": "Read the function definition and check if parameters are positional or destructured from an object"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Missing await on a function that returns a promise is intentional fire-and-forget (e.g., analytics, logging, cache warming)",
+      "mitigation": "Check if the return value of the async call is used downstream. If the result is discarded (not assigned, not passed, not awaited), it may be intentional fire-and-forget. Check for a void operator or a comment like '// fire and forget'. Lower confidence if the call is to analytics, logging, or cache-related functions.",
+      "detection_command": "Check whether the return value is assigned to a variable or used in an expression"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "== instead of === is intentional for null/undefined coalescing (value == null catches both null and undefined)",
+      "mitigation": "The pattern 'value == null' is a widely accepted idiom that checks for both null and undefined in a single comparison. Do not flag == when both operands involve null or undefined. Only flag == with other primitive comparisons (numbers, strings, booleans).",
+      "detection_command": "Check if the == comparison has null or undefined on either side"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Early return appears to skip cleanup but there is a finally block or using/defer that handles it",
+      "mitigation": "Check for finally blocks, using declarations (TC39 explicit resource management), defer patterns, or cleanup registered in a parent scope. If cleanup is guaranteed by language-level constructs, the early return is safe.",
+      "detection_command": "grep -n 'finally\\|using \\|defer\\|Symbol.dispose' <file>"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Array.forEach with async callback is intentional parallel execution (not sequential) and errors are handled by Promise.allSettled elsewhere",
+      "mitigation": "Check if the forEach results are collected into an array and later passed to Promise.all or Promise.allSettled. If so, the developer intentionally uses forEach for parallel fire. Still flag if no collection or settling is visible, but lower confidence.",
+      "detection_command": "grep -n 'Promise.all\\|Promise.allSettled\\|Promise.race' <file>"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "Project intentionally targets an older runtime version where the API is not yet deprecated (e.g., Node 14 where url.parse is standard)",
+      "mitigation": "Check the project's target runtime version from engines in package.json, .nvmrc, Dockerfile, or tsconfig target. If the deprecated-since version is newer than the project's target, suppress the finding.",
+      "detection_command": "grep '\"engines\"\\|\"node\"' package.json; cat .nvmrc .node-version 2>/dev/null"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "Project is in a migration period and old and new patterns intentionally coexist (e.g., migrating from Pages Router to App Router in Next.js)",
+      "mitigation": "Check whether both old and new patterns exist in the codebase. If both pages/ and app/ directories exist, or both old and new APIs are used elsewhere in the project, the deprecated pattern may be intentional during migration. Lower severity to informational and note the migration context.",
+      "detection_command": "ls -d pages/ app/ 2>/dev/null; grep -rn '<old_pattern>\\|<new_pattern>' src/ 2>/dev/null | wc -l"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "The replacement API has a different behavior or is not a drop-in substitute, and the old API is used for its specific semantics",
+      "mitigation": "Before flagging, verify that the replacement API is actually a safe substitute. For example, new URL() throws on invalid URLs while url.parse() returns null -- they have different error semantics. If the code relies on the specific behavior of the old API (like non-throwing), note this in the finding and lower confidence.",
+      "detection_command": "Check if the code's error handling relies on the old API's specific behavior (e.g., try/catch vs null check)"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "The project uses the deprecated API via a compatibility wrapper or shim that handles the deprecation internally",
+      "mitigation": "Search for wrapper functions or utility modules that encapsulate the deprecated API. If the project has a utils/url.ts that wraps url.parse with the correct behavior, the call through the wrapper is acceptable.",
+      "detection_command": "grep -rn 'function.*parse\\|const.*parse' src/utils/ src/lib/ src/helpers/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "Library is pinned to a specific older major version where the API is not deprecated (e.g., React 17 class components are not deprecated in React 17)",
+      "mitigation": "Read the exact installed version from the lockfile or node_modules/<pkg>/package.json. Cross-reference against the since_version in the deprecation database. Only flag if the installed version is at or above the deprecation version.",
+      "detection_command": "grep '\"version\"' node_modules/<package>/package.json"
+    },
+    {
+      "pattern_id": "DEPRECATED_API",
+      "false_positive_scenario": "The deprecated flag is from a style guide or community convention, not an official deprecation (e.g., enum in TypeScript is discouraged but not deprecated)",
+      "mitigation": "Distinguish between official deprecations (marked @deprecated in source, documented in changelogs) and community preferences. Only flag official deprecations at MEDIUM severity. Community preferences should only be flagged if a custom rule in .claude/preflight/rules.md explicitly requests it.",
+      "detection_command": "Check if the deprecation entry has since_version: null, which indicates a convention rather than an official deprecation"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "Errors are handled by a parent caller or higher-order function that wraps the call in try/catch",
+      "mitigation": "Trace the call chain upward. If the function is only called from within a try/catch block, or is wrapped by an error-handling utility (withErrorHandler, tryCatch, safeFetch), the missing local error handling is intentional delegation. Search for all call sites of the function.",
+      "detection_command": "grep -rn '<function_name>' src/ --include='*.ts' --include='*.tsx' | grep -v 'def\\|function\\|const.*='"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "Application has a global error handler (process.on unhandledRejection, Express error middleware, React error boundary) that catches unhandled errors",
+      "mitigation": "Search for global error handlers in the project. If process.on('unhandledRejection'), a top-level Express error middleware (4-arg function), or React ErrorBoundary components exist, lower the confidence of missing-error-handling findings for operations that would be caught by these handlers.",
+      "detection_command": "grep -rn 'unhandledRejection\\|uncaughtException\\|ErrorBoundary\\|err, req, res, next' src/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "The project uses a framework that automatically handles errors (e.g., Next.js error.tsx boundaries, tRPC error formatting, GraphQL error handling)",
+      "mitigation": "Check for framework-level error handling files: app/error.tsx (Next.js), error formatting middleware (tRPC), formatError (Apollo/GraphQL). These frameworks catch thrown errors at the boundary level, so individual route handlers may intentionally let errors propagate.",
+      "detection_command": "find app/ pages/ -name 'error.*' -o -name 'error-boundary.*' 2>/dev/null; grep -rn 'formatError\\|onError\\|errorFormatter' src/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "The function is a test or script where crashing on error is the desired behavior",
+      "mitigation": "Check the file path and context. Files in __tests__/, test/, *.test.ts, *.spec.ts, scripts/, or CLI tools may intentionally omit error handling to fail loudly. Test files should not be flagged for missing error handling unless the test itself is testing error paths.",
+      "detection_command": "Check if the file path contains 'test', 'spec', 'scripts', 'cli', or 'tools'"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "TypeScript strict mode with strictNullChecks eliminates null-related errors at compile time, making runtime null checks redundant",
+      "mitigation": "Read tsconfig.json for strict or strictNullChecks. If enabled, TypeScript's type system guarantees non-null values at the usage site, so runtime null checks are compiler-enforced rather than manually written. Lower confidence for null-check findings in strict TypeScript projects.",
+      "detection_command": "grep -E '\"strict\".*true|\"strictNullChecks\".*true' tsconfig.json 2>/dev/null"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Hardcoded string that looks like a secret is actually a test/example/placeholder value (e.g., sk-test-xxxx, AKIA0000000000000000)",
+      "mitigation": "Check if the file is in a test directory, contains 'example', 'mock', 'fixture', 'placeholder', 'dummy', or 'test' in the filename or nearby comments. Also check if the value matches known test/example patterns: 'sk-test-', 'pk_test_', 'AKIA0000', 'password123', 'changeme', 'your-api-key-here'.",
+      "detection_command": "Check if the file path or surrounding code contains test/example/mock indicators"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "High-entropy string flagged as a secret is actually a CSS hex color, a hash constant, a UUID, or a base64-encoded static asset",
+      "mitigation": "Check the context of the high-entropy string. If it matches a UUID pattern (8-4-4-4-12), a hex color (#[0-9a-f]{6}), a content hash for cache busting, or is in a CSS/SVG/asset file, suppress the finding. Also check if it appears in a constant that is clearly non-secret (e.g., HASH_ALGORITHM, COLOR_PRIMARY).",
+      "detection_command": "Examine the variable name and assignment context for non-secret indicators"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Secret is loaded from environment variable but the detection sees the env var name as a hardcoded value (e.g., process.env.DATABASE_URL appears as a literal)",
+      "mitigation": "Verify whether the flagged value is the actual secret or an environment variable reference. process.env.SECRET_KEY, os.environ['KEY'], and similar patterns are safe because the value comes from the runtime environment. Only flag when a literal credential value is present in source.",
+      "detection_command": "Check if the flagged string is prefixed by process.env, os.environ, env., or Deno.env"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Code that appears to be SQL injection is actually using a tagged template literal or parameterized query builder that escapes values",
+      "mitigation": "Check if the SQL string uses template literals with a sql tag (sql`...`, Prisma.sql, postgres tagged templates), or parameterized placeholders ($1, ?, :param). Tagged template SQL libraries (like slonik, postgres, Prisma) safely escape interpolated values. Only flag raw string concatenation with + or untagged template literals.",
+      "detection_command": "Check whether the SQL string uses a tagged template literal or parameterized placeholders"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Permissive CORS configuration (Access-Control-Allow-Origin: *) is intentional for a public API or static asset server",
+      "mitigation": "Check if the project is a public API, CDN, documentation site, or open-source tool where broad CORS is expected. If the API does not require authentication or deals only with public data, permissive CORS is correct. Only flag permissive CORS when the API also handles authenticated requests or sensitive data.",
+      "detection_command": "Check if the CORS config coexists with authentication middleware or sensitive data routes"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "value || default flagged as incorrect nullish coalescing, but the code intentionally treats 0 and empty string as falsy (e.g., filtering out empty/zero inputs)",
+      "mitigation": "Check the semantic context. If the variable represents user input where 0 and '' are invalid/empty values that should fall back to default, then || is correct. Only flag || vs ?? when the variable can legitimately be 0 or '' as a valid value (e.g., numeric quantity, optional label).",
+      "detection_command": "Check the variable's type and whether 0/'' are valid values in the business domain"
+    },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method exists at runtime but not in the type definitions (common with dynamically-typed libraries or when @types is outdated)",
+      "mitigation": "If type definitions do not list the method but the installed package's JavaScript source does, the types are incomplete rather than the API being hallucinated. Check the actual .js source files in node_modules, not just .d.ts files. If found in source, lower severity and suggest a type declaration fix rather than code removal.",
+      "detection_command": "grep -r '<method>' node_modules/<package>/dist/*.js node_modules/<package>/lib/*.js 2>/dev/null"
+    },
+    {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is listed in optionalDependencies and may not be installed on all platforms (e.g., fsevents on Linux, better-sqlite3 on some CI)",
+      "mitigation": "Check optionalDependencies in package.json. If the package is listed there, it may legitimately be absent on certain platforms. The code should handle the missing module gracefully (try/require with catch), but the import itself is not phantom.",
+      "detection_command": "grep -A 10 '\"optionalDependencies\"' package.json | grep '<package>'"
+    },
+    {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "The async operation uses a Result/Either type pattern instead of try/catch (common in functional programming approaches using neverthrow, fp-ts, or Effect)",
+      "mitigation": "Check if the project uses Result/Either/Effect patterns by searching for imports from neverthrow, fp-ts, effect, or custom Result types. If the return type is Result<T, E> or Either<L, R>, errors are encoded in the return value and do not require try/catch.",
+      "detection_command": "grep -rn 'neverthrow\\|fp-ts\\|@effect\\|Result<\\|Either<\\|ok(\\|err(' src/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Comparison flagged as wrong operator but the code uses a custom comparator or overloaded operator (e.g., dayjs().isBefore() instead of < operator)",
+      "mitigation": "Check whether the comparison involves wrapper types (dayjs, moment, BigNumber, Decimal) that provide their own comparison methods. Raw operator comparisons on wrapper types may be intentionally wrong or intentionally correct depending on the type's valueOf() implementation. Only flag with high confidence when the types are primitives.",
+      "detection_command": "Check the type of the operands being compared"
+    }
+  ]
+}

@@ -1,0 +1,1284 @@
+{
+  "react": [
+    {
+      "deprecated": "componentWillMount",
+      "replacement": "useEffect(() => {}, [])",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Class lifecycle method deprecated in 16.3; removed in React 19"
+    },
+    {
+      "deprecated": "componentWillReceiveProps",
+      "replacement": "static getDerivedStateFromProps() or useEffect with deps",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Class lifecycle method deprecated in 16.3; removed in React 19"
+    },
+    {
+      "deprecated": "componentWillUpdate",
+      "replacement": "getSnapshotBeforeUpdate() or useEffect",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Class lifecycle method deprecated in 16.3; removed in React 19"
+    },
+    {
+      "deprecated": "UNSAFE_componentWillMount",
+      "replacement": "useEffect(() => {}, [])",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Renamed with UNSAFE_ prefix in 16.3; removed entirely in React 19"
+    },
+    {
+      "deprecated": "UNSAFE_componentWillReceiveProps",
+      "replacement": "static getDerivedStateFromProps()",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Renamed with UNSAFE_ prefix in 16.3; removed entirely in React 19"
+    },
+    {
+      "deprecated": "UNSAFE_componentWillUpdate",
+      "replacement": "getSnapshotBeforeUpdate()",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Renamed with UNSAFE_ prefix in 16.3; removed entirely in React 19"
+    },
+    {
+      "deprecated": "ReactDOM.render()",
+      "replacement": "createRoot().render()",
+      "since_version": "18.0",
+      "removed_in": "19.0",
+      "notes": "Legacy root API removed in React 19; use createRoot from react-dom/client"
+    },
+    {
+      "deprecated": "ReactDOM.hydrate()",
+      "replacement": "hydrateRoot()",
+      "since_version": "18.0",
+      "removed_in": "19.0",
+      "notes": "Legacy hydration API removed in React 19; use hydrateRoot from react-dom/client"
+    },
+    {
+      "deprecated": "ReactDOM.unmountComponentAtNode()",
+      "replacement": "root.unmount()",
+      "since_version": "18.0",
+      "removed_in": "19.0",
+      "notes": "Removed in React 19; use the unmount method on the root returned by createRoot"
+    },
+    {
+      "deprecated": "ReactDOM.findDOMNode()",
+      "replacement": "useRef()",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Removed in React 19; use refs instead"
+    },
+    {
+      "deprecated": "React.createFactory()",
+      "replacement": "React.createElement() or JSX",
+      "since_version": "18.0",
+      "removed_in": "19.0",
+      "notes": "Removed in React 19; use JSX or createElement"
+    },
+    {
+      "deprecated": "defaultProps on function components",
+      "replacement": "ES6 default parameters",
+      "since_version": "18.3",
+      "removed_in": "19.0",
+      "notes": "Deprecated for function components in 18.3; removed in React 19. Class components still support defaultProps"
+    },
+    {
+      "deprecated": "React.PropTypes",
+      "replacement": "prop-types package or TypeScript",
+      "since_version": "15.5",
+      "removed_in": "19.0",
+      "notes": "Moved to separate prop-types package in 15.5; propTypes silently ignored in React 19"
+    },
+    {
+      "deprecated": "string refs (ref=\"myRef\")",
+      "replacement": "React.createRef() or useRef()",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "String refs removed in React 19; use createRef, useRef, or ref callbacks"
+    },
+    {
+      "deprecated": "Legacy Context (contextTypes, childContextTypes, getChildContext)",
+      "replacement": "React.createContext() and useContext()",
+      "since_version": "16.3",
+      "removed_in": "19.0",
+      "notes": "Legacy context API removed in React 19; use createContext and useContext"
+    },
+    {
+      "deprecated": "forwardRef()",
+      "replacement": "ref is a regular prop in React 19+",
+      "since_version": "19.0",
+      "removed_in": null,
+      "notes": "In React 19, ref is passed as a regular prop; forwardRef is no longer needed but still works"
+    },
+    {
+      "deprecated": "react-dom/test-utils (except act)",
+      "replacement": "act() moved to react package; use @testing-library/react",
+      "since_version": "19.0",
+      "removed_in": "19.0",
+      "notes": "All react-dom/test-utils functions removed in React 19; act moved to react package"
+    },
+    {
+      "deprecated": "react-test-renderer/shallow",
+      "replacement": "react-shallow-renderer package or @testing-library/react",
+      "since_version": "18.0",
+      "removed_in": "19.0",
+      "notes": "Shallow renderer removed in React 19; was already a re-export of react-shallow-renderer since 18"
+    },
+    {
+      "deprecated": "UMD builds of React",
+      "replacement": "ESM-based CDN (e.g., esm.sh)",
+      "since_version": "19.0",
+      "removed_in": "19.0",
+      "notes": "UMD builds removed in React 19; use ESM-based CDN for script tag usage"
+    },
+    {
+      "deprecated": "React.Children.forEach / map for data",
+      "replacement": "Pass data as props array",
+      "since_version": null,
+      "removed_in": null,
+      "notes": "Anti-pattern; React.Children utilities are fragile with fragments and keys"
+    }
+  ],
+  "nextjs": [
+    {
+      "deprecated": "getServerSideProps",
+      "replacement": "Server Components with async/await",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Pages Router pattern; in App Router, fetch data directly in server components. Still works in Pages Router"
+    },
+    {
+      "deprecated": "getStaticProps",
+      "replacement": "Server Components with fetch and caching",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Pages Router pattern; in App Router, use fetch with cache options"
+    },
+    {
+      "deprecated": "getStaticPaths",
+      "replacement": "generateStaticParams()",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Pages Router pattern; in App Router, export generateStaticParams"
+    },
+    {
+      "deprecated": "getInitialProps",
+      "replacement": "Server Components or getServerSideProps",
+      "since_version": "9.3",
+      "removed_in": null,
+      "notes": "Legacy data fetching; avoid in both Pages and App Router"
+    },
+    {
+      "deprecated": "next/head",
+      "replacement": "Metadata API (export const metadata or generateMetadata)",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "In App Router, use the Metadata API instead of next/head"
+    },
+    {
+      "deprecated": "_app.tsx / _app.jsx",
+      "replacement": "app/layout.tsx (root layout)",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Pages Router file; in App Router, use layout.tsx"
+    },
+    {
+      "deprecated": "_document.tsx / _document.jsx",
+      "replacement": "app/layout.tsx (root layout with html/body tags)",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Pages Router file; in App Router, put html/body in root layout"
+    },
+    {
+      "deprecated": "next/router (useRouter from next/router)",
+      "replacement": "next/navigation (useRouter, usePathname, useSearchParams)",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "In App Router, import from next/navigation not next/router"
+    },
+    {
+      "deprecated": "middleware.ts",
+      "replacement": "proxy.ts",
+      "since_version": "16.0",
+      "removed_in": null,
+      "notes": "In Next.js 16, middleware.ts is renamed to proxy.ts. Export a proxy function. Runs on Node.js runtime only (Edge runtime not supported in proxy). Configuration flags like skipMiddlewareUrlNormalize renamed to skipProxyUrlNormalize"
+    },
+    {
+      "deprecated": "Synchronous access to cookies(), headers(), draftMode(), params, searchParams",
+      "replacement": "await cookies(), await headers(), await params, etc.",
+      "since_version": "15.0",
+      "removed_in": "16.0",
+      "notes": "Async request APIs introduced in Next.js 15 with sync compatibility. In Next.js 16, synchronous access is fully removed; must use await or React.use() in client components"
+    },
+    {
+      "deprecated": "next.config.js",
+      "replacement": "next.config.ts",
+      "since_version": "15.0",
+      "removed_in": null,
+      "notes": "TypeScript config files preferred since Next.js 15; .js still works but .ts is recommended"
+    },
+    {
+      "deprecated": "next export",
+      "replacement": "output: 'export' in next.config",
+      "since_version": "13.3",
+      "removed_in": "14.0",
+      "notes": "The next export command is removed; use output: 'export' in next.config"
+    },
+    {
+      "deprecated": "next/image legacy layout prop",
+      "replacement": "width/height/fill props",
+      "since_version": "13.0",
+      "removed_in": "13.0",
+      "notes": "The layout prop is removed; use fill for layout=fill, or width+height"
+    },
+    {
+      "deprecated": "next/image objectFit and objectPosition props",
+      "replacement": "style={{ objectFit, objectPosition }}",
+      "since_version": "13.0",
+      "removed_in": "13.0",
+      "notes": "Use standard CSS style prop instead of dedicated props"
+    },
+    {
+      "deprecated": "next/link with <a> child",
+      "replacement": "next/link renders <a> automatically",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Since Next.js 13, Link renders an anchor tag; no child <a> needed"
+    },
+    {
+      "deprecated": "API Routes in pages/api/",
+      "replacement": "Route Handlers in app/api/route.ts",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "In App Router, use route.ts with GET/POST exports instead of pages/api"
+    },
+    {
+      "deprecated": "req.query in API routes",
+      "replacement": "request.nextUrl.searchParams in Route Handlers",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Route Handlers use Web API Request; no req.query available"
+    },
+    {
+      "deprecated": "res.json() / res.status() in API routes",
+      "replacement": "Return NextResponse.json() or new Response()",
+      "since_version": "13.0",
+      "removed_in": null,
+      "notes": "Route Handlers return Response objects instead of using res methods"
+    },
+    {
+      "deprecated": "experimental.appDir in next.config",
+      "replacement": "App Router is stable and enabled by default",
+      "since_version": "13.4",
+      "removed_in": "14.0",
+      "notes": "The appDir flag was removed; App Router is default since Next.js 13.4"
+    },
+    {
+      "deprecated": "next/legacy/image",
+      "replacement": "next/image",
+      "since_version": "13.0",
+      "removed_in": "16.0",
+      "notes": "Legacy image component deprecated in 13 and removed in Next.js 16"
+    },
+    {
+      "deprecated": "AMP support (amp config, amp pages)",
+      "replacement": "No replacement; AMP adoption has declined",
+      "since_version": "15.0",
+      "removed_in": "16.0",
+      "notes": "All AMP APIs and configurations removed in Next.js 16"
+    },
+    {
+      "deprecated": "next lint",
+      "replacement": "Run ESLint or Biome directly",
+      "since_version": "16.0",
+      "removed_in": "16.0",
+      "notes": "next lint command removed in Next.js 16; next build no longer runs linting"
+    },
+    {
+      "deprecated": "serverRuntimeConfig / publicRuntimeConfig",
+      "replacement": "Environment variables (.env files)",
+      "since_version": "13.0",
+      "removed_in": "16.0",
+      "notes": "Runtime configs removed in Next.js 16; use .env files instead"
+    },
+    {
+      "deprecated": "experimental.ppr",
+      "replacement": "Cache Components with 'use cache' directive",
+      "since_version": "16.0",
+      "removed_in": "16.0",
+      "notes": "PPR evolved into Cache Components in Next.js 16; use 'use cache' directive instead of global ppr flag"
+    },
+    {
+      "deprecated": "unstable_revalidate",
+      "replacement": "revalidate (stable)",
+      "since_version": "12.2",
+      "removed_in": "13.0",
+      "notes": "ISR revalidation is stable; drop the unstable_ prefix"
+    }
+  ],
+  "nodejs": [
+    {
+      "deprecated": "new Buffer() / Buffer()",
+      "replacement": "Buffer.alloc(), Buffer.from(), or Buffer.allocUnsafe()",
+      "since_version": "6.0",
+      "dep_code": "DEP0005",
+      "notes": "Security issue: Buffer() and new Buffer() are unsafe; use static methods"
+    },
+    {
+      "deprecated": "url.parse()",
+      "replacement": "new URL()",
+      "since_version": "11.0",
+      "dep_code": "DEP0169",
+      "notes": "Legacy URL API; use the WHATWG URL API (new URL()). Runtime deprecated in Node.js 24"
+    },
+    {
+      "deprecated": "url.resolve()",
+      "replacement": "new URL(path, base)",
+      "since_version": "11.0",
+      "dep_code": "DEP0169",
+      "notes": "Legacy URL API; use the WHATWG URL constructor"
+    },
+    {
+      "deprecated": "url.format()",
+      "replacement": "url.toString() on WHATWG URL object",
+      "since_version": "11.0",
+      "dep_code": "DEP0169",
+      "notes": "Legacy URL API; construct a URL object and call toString()"
+    },
+    {
+      "deprecated": "querystring module",
+      "replacement": "URLSearchParams",
+      "since_version": null,
+      "dep_code": null,
+      "notes": "Considered legacy but NOT formally deprecated. URLSearchParams is preferred for new code but querystring still works and has no deprecation warning"
+    },
+    {
+      "deprecated": "fs.exists()",
+      "replacement": "fs.access() or fs.stat()",
+      "since_version": "1.0",
+      "dep_code": "DEP0103",
+      "notes": "Callback has non-standard signature; use fs.access or fs.stat. Note: fs.existsSync() is NOT deprecated"
+    },
+    {
+      "deprecated": "require('domain')",
+      "replacement": "AsyncLocalStorage or proper error handling",
+      "since_version": "1.0",
+      "dep_code": "DEP0012",
+      "notes": "Domain module is deprecated; use AsyncLocalStorage for context propagation"
+    },
+    {
+      "deprecated": "require('punycode')",
+      "replacement": "npm install punycode or use URL API",
+      "since_version": "7.0",
+      "dep_code": "DEP0040",
+      "notes": "Deprecated in Node.js core; install from npm if needed"
+    },
+    {
+      "deprecated": "crypto.createCipher()",
+      "replacement": "crypto.createCipheriv()",
+      "since_version": "10.0",
+      "dep_code": "DEP0106",
+      "notes": "createCipher derives key without salt; use createCipheriv with explicit IV"
+    },
+    {
+      "deprecated": "crypto.createDecipher()",
+      "replacement": "crypto.createDecipheriv()",
+      "since_version": "10.0",
+      "dep_code": "DEP0106",
+      "notes": "Same issue as createCipher; use createDecipheriv"
+    },
+    {
+      "deprecated": "crypto.fips",
+      "replacement": "crypto.getFips() and crypto.setFips()",
+      "since_version": "10.0",
+      "dep_code": "DEP0093",
+      "notes": "Property access deprecated; use getter/setter methods"
+    },
+    {
+      "deprecated": "process.binding()",
+      "replacement": "No direct replacement; use public APIs",
+      "since_version": "10.9",
+      "dep_code": "DEP0111",
+      "notes": "Internal binding layer; not meant for public use"
+    },
+    {
+      "deprecated": "SlowBuffer",
+      "replacement": "Buffer.allocUnsafeSlow()",
+      "since_version": "6.0",
+      "dep_code": "DEP0030",
+      "notes": "Use Buffer.allocUnsafeSlow() for non-pooled buffers"
+    },
+    {
+      "deprecated": "tls.createSecurePair()",
+      "replacement": "tls.TLSSocket",
+      "since_version": "0.11",
+      "dep_code": "DEP0064",
+      "notes": "Use tls.TLSSocket directly. Removed in Node.js 24"
+    },
+    {
+      "deprecated": "os.tmpDir()",
+      "replacement": "os.tmpdir()",
+      "since_version": "7.0",
+      "dep_code": "DEP0022",
+      "notes": "Inconsistent casing was fixed; use lowercase tmpdir()"
+    },
+    {
+      "deprecated": "util.puts(), util.print(), util.debug(), util.error()",
+      "replacement": "console.log(), console.error()",
+      "since_version": "0.11",
+      "dep_code": "DEP0059",
+      "notes": "Legacy util output functions; use console methods"
+    },
+    {
+      "deprecated": "util.pump()",
+      "replacement": "stream.pipeline() or stream.pipe()",
+      "since_version": "0.10",
+      "dep_code": "DEP0004",
+      "notes": "Use stream.pipeline for proper error handling"
+    },
+    {
+      "deprecated": "util.isArray(), util.isBoolean(), util.isNull(), etc.",
+      "replacement": "Array.isArray(), typeof checks",
+      "since_version": "4.0",
+      "dep_code": "DEP0044-DEP0058",
+      "notes": "Type-checking functions deprecated; use native JS operators"
+    },
+    {
+      "deprecated": "util.log()",
+      "replacement": "console.log() with timestamp or a logging library",
+      "since_version": "6.0",
+      "dep_code": "DEP0059",
+      "notes": "Deprecated; use a proper logging solution"
+    },
+    {
+      "deprecated": "util._extend()",
+      "replacement": "Object.assign() or spread syntax",
+      "since_version": "6.0",
+      "dep_code": "DEP0060",
+      "notes": "Internal utility; use Object.assign or { ...obj }"
+    },
+    {
+      "deprecated": "import assertions (assert { type: 'json' })",
+      "replacement": "import attributes (with { type: 'json' })",
+      "since_version": "22.0",
+      "dep_code": null,
+      "notes": "The assert keyword for import assertions is replaced by with keyword (import attributes) in Node.js 22+. Old syntax removed in Node.js 22"
+    },
+    {
+      "deprecated": "require('sys')",
+      "replacement": "require('util')",
+      "since_version": "0.3",
+      "dep_code": "DEP0025",
+      "notes": "sys was renamed to util very early in Node.js history"
+    }
+  ],
+  "express": [
+    {
+      "deprecated": "app.del()",
+      "replacement": "app.delete()",
+      "since_version": "3.0",
+      "removed_in": "5.0",
+      "notes": "Renamed from del to delete; removed in Express 5"
+    },
+    {
+      "deprecated": "express.createServer()",
+      "replacement": "express()",
+      "since_version": "3.0",
+      "removed_in": "3.0",
+      "notes": "Removed in Express 3; just call express()"
+    },
+    {
+      "deprecated": "express.bodyParser()",
+      "replacement": "express.json() and express.urlencoded()",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Built-in bodyParser removed in Express 4; use express.json() and express.urlencoded() since 4.16"
+    },
+    {
+      "deprecated": "express.cookieParser()",
+      "replacement": "cookie-parser package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install cookie-parser separately"
+    },
+    {
+      "deprecated": "express.session()",
+      "replacement": "express-session package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install express-session separately"
+    },
+    {
+      "deprecated": "express.methodOverride()",
+      "replacement": "method-override package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install method-override separately"
+    },
+    {
+      "deprecated": "express.logger()",
+      "replacement": "morgan package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install morgan separately"
+    },
+    {
+      "deprecated": "express.favicon()",
+      "replacement": "serve-favicon package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install serve-favicon separately"
+    },
+    {
+      "deprecated": "express.compress()",
+      "replacement": "compression package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install compression separately"
+    },
+    {
+      "deprecated": "express.errorHandler()",
+      "replacement": "Custom error handling middleware",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; write custom error middleware"
+    },
+    {
+      "deprecated": "express.directory()",
+      "replacement": "serve-index package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install serve-index separately"
+    },
+    {
+      "deprecated": "express.multipart()",
+      "replacement": "multer package",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed from Express core; install multer for file uploads"
+    },
+    {
+      "deprecated": "res.sendfile()",
+      "replacement": "res.sendFile()",
+      "since_version": "4.8",
+      "removed_in": "5.0",
+      "notes": "Lowercase sendfile deprecated in 4.8; removed in Express 5"
+    },
+    {
+      "deprecated": "res.json(statusCode, obj)",
+      "replacement": "res.status(statusCode).json(obj)",
+      "since_version": "4.0",
+      "removed_in": "5.0",
+      "notes": "Passing status as first arg removed in Express 5; chain status().json()"
+    },
+    {
+      "deprecated": "res.send(statusCode, body)",
+      "replacement": "res.status(statusCode).send(body)",
+      "since_version": "4.0",
+      "removed_in": "5.0",
+      "notes": "Passing status as first arg removed in Express 5; chain status().send()"
+    },
+    {
+      "deprecated": "res.send(status) where status is a number",
+      "replacement": "res.sendStatus(status) or res.status(status).send()",
+      "since_version": "4.0",
+      "removed_in": "5.0",
+      "notes": "Sending a bare number removed in Express 5; use sendStatus or status().send()"
+    },
+    {
+      "deprecated": "res.jsonp(obj, status)",
+      "replacement": "res.status(status).jsonp(obj)",
+      "since_version": "4.0",
+      "removed_in": "5.0",
+      "notes": "Passing status as second arg to jsonp removed in Express 5"
+    },
+    {
+      "deprecated": "res.redirect('back')",
+      "replacement": "res.redirect(req.get('Referrer') || '/')",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "Magic string 'back' removed in Express 5; use req.get('Referrer') manually"
+    },
+    {
+      "deprecated": "req.param(name)",
+      "replacement": "req.params.name, req.body.name, or req.query.name",
+      "since_version": "4.11",
+      "removed_in": "5.0",
+      "notes": "Searched params/body/query which is ambiguous; removed in Express 5"
+    },
+    {
+      "deprecated": "app.param(fn) (custom param function signature)",
+      "replacement": "Use app.param(name, fn) with standard signature",
+      "since_version": "4.11",
+      "removed_in": "5.0",
+      "notes": "The app.param(fn) callback signature removed in Express 5"
+    },
+    {
+      "deprecated": "app.configure()",
+      "replacement": "Use if statements with process.env.NODE_ENV",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Removed in Express 4; use plain conditionals"
+    },
+    {
+      "deprecated": "req.acceptsCharset() / req.acceptsEncoding() / req.acceptsLanguage()",
+      "replacement": "req.acceptsCharsets() / req.acceptsEncodings() / req.acceptsLanguages()",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "Singular forms removed in Express 5; use plural forms"
+    },
+    {
+      "deprecated": "Sub-expressions in route regex patterns",
+      "replacement": "Use simpler path patterns or named params",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "Express 5 changed path-to-regexp to avoid ReDoS attacks; sub-expressions no longer supported"
+    }
+  ],
+  "typescript": [
+    {
+      "deprecated": "compilerOptions.importsNotUsedAsValues",
+      "replacement": "compilerOptions.verbatimModuleSyntax",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Replaced by verbatimModuleSyntax which is more predictable"
+    },
+    {
+      "deprecated": "compilerOptions.preserveValueImports",
+      "replacement": "compilerOptions.verbatimModuleSyntax",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Replaced by verbatimModuleSyntax"
+    },
+    {
+      "deprecated": "compilerOptions.keyofStringsOnly",
+      "replacement": "No replacement needed",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Was a compatibility flag for pre-2.9 behavior; no longer relevant"
+    },
+    {
+      "deprecated": "compilerOptions.suppressImplicitAnyIndexErrors",
+      "replacement": "compilerOptions.noUncheckedIndexedAccess",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Use noUncheckedIndexedAccess for safer index access"
+    },
+    {
+      "deprecated": "compilerOptions.suppressExcessPropertyErrors",
+      "replacement": "No replacement; fix the excess properties",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Suppressing type errors is not recommended"
+    },
+    {
+      "deprecated": "compilerOptions.noStrictGenericChecks",
+      "replacement": "No replacement; fix type issues",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "Disabling strict checks is not recommended"
+    },
+    {
+      "deprecated": "compilerOptions.out",
+      "replacement": "compilerOptions.outFile",
+      "since_version": "1.5",
+      "removed_in": "6.0",
+      "notes": "Renamed from out to outFile for clarity"
+    },
+    {
+      "deprecated": "compilerOptions.charset",
+      "replacement": "No replacement needed; UTF-8 is default",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "TypeScript only supports UTF-8; this option had no effect"
+    },
+    {
+      "deprecated": "compilerOptions.target: 'ES3'",
+      "replacement": "compilerOptions.target: 'ES2016' or higher",
+      "since_version": "5.0",
+      "removed_in": "6.0",
+      "notes": "ES3 target deprecated in TS 5.0; ES5 also deprecated in TS 6.0. Minimum target is now ES2015"
+    },
+    {
+      "deprecated": "compilerOptions.target: 'ES5'",
+      "replacement": "compilerOptions.target: 'ES2015' or higher",
+      "since_version": "6.0",
+      "removed_in": null,
+      "notes": "ES5 target deprecated in TypeScript 6.0; lowest target is now ES2015. Will be removed in TS 7.0"
+    },
+    {
+      "deprecated": "compilerOptions.module: 'amd' / 'umd' / 'system'",
+      "replacement": "compilerOptions.module: 'esnext', 'node16', or 'nodenext'",
+      "since_version": "6.0",
+      "removed_in": null,
+      "notes": "AMD, UMD, and SystemJS module systems deprecated in TS 6.0; will be removed in TS 7.0"
+    },
+    {
+      "deprecated": "compilerOptions.downlevelIteration",
+      "replacement": "No replacement; only applied to ES5 emit which is now deprecated",
+      "since_version": "6.0",
+      "removed_in": null,
+      "notes": "Since target ES5 is deprecated, downlevelIteration has no purpose. Deprecated in TS 6.0"
+    },
+    {
+      "deprecated": "compilerOptions.baseUrl (for non-path-mapping use)",
+      "replacement": "Use paths with explicit mappings or remove baseUrl",
+      "since_version": "6.0",
+      "removed_in": null,
+      "notes": "baseUrl deprecated in TS 6.0 when not used with paths; rootDir now defaults to config directory. Will stop functioning in TS 7.0"
+    },
+    {
+      "deprecated": "/// <reference path=\"...\" />",
+      "replacement": "import statements and tsconfig includes",
+      "since_version": "2.0",
+      "removed_in": null,
+      "notes": "Triple-slash references are legacy; use module imports"
+    },
+    {
+      "deprecated": "namespace (internal modules)",
+      "replacement": "ES modules (import/export)",
+      "since_version": "1.5",
+      "removed_in": null,
+      "notes": "Namespaces are legacy; use ES module syntax for code organization"
+    },
+    {
+      "deprecated": "compilerOptions.moduleResolution: 'node'",
+      "replacement": "compilerOptions.moduleResolution: 'node16', 'nodenext', or 'bundler'",
+      "since_version": "5.0",
+      "removed_in": null,
+      "notes": "The 'node' resolution mode doesn't support exports/imports in package.json"
+    },
+    {
+      "deprecated": "compilerOptions.jsx: 'react'",
+      "replacement": "compilerOptions.jsx: 'react-jsx'",
+      "since_version": "4.1",
+      "removed_in": null,
+      "notes": "The react mode requires React in scope; react-jsx uses the new JSX transform"
+    },
+    {
+      "deprecated": "import assertions (assert { type: 'json' })",
+      "replacement": "import attributes (with { type: 'json' })",
+      "since_version": "5.8",
+      "removed_in": null,
+      "notes": "TypeScript 5.8 errors on import assertions under --module nodenext; use 'with' keyword instead of 'assert'"
+    },
+    {
+      "deprecated": "enum (in some style guides)",
+      "replacement": "const objects with as const",
+      "since_version": null,
+      "removed_in": null,
+      "notes": "Not officially deprecated but widely discouraged; use as const for union types"
+    }
+  ],
+  "python": [
+    {
+      "deprecated": "typing.List, typing.Dict, typing.Tuple, typing.Set, typing.FrozenSet",
+      "replacement": "list[], dict[], tuple[], set[], frozenset[] (built-in generics)",
+      "since_version": "3.9",
+      "removed_in": null,
+      "notes": "PEP 585: built-in types support subscripting since 3.9; typing aliases deprecated. Scheduled for removal after Python 3.9 EOL (Oct 2025)"
+    },
+    {
+      "deprecated": "typing.Optional[X]",
+      "replacement": "X | None (union syntax)",
+      "since_version": "3.10",
+      "removed_in": null,
+      "notes": "PEP 604 introduced X | None syntax in 3.10; Optional[X] still works but is considered legacy"
+    },
+    {
+      "deprecated": "typing.Union[X, Y]",
+      "replacement": "X | Y (pipe union syntax)",
+      "since_version": "3.10",
+      "removed_in": null,
+      "notes": "PEP 604 introduced X | Y syntax in 3.10; Union still works but is considered legacy"
+    },
+    {
+      "deprecated": "typing.Callable",
+      "replacement": "collections.abc.Callable",
+      "since_version": "3.9",
+      "removed_in": null,
+      "notes": "Use collections.abc.Callable for type hints since 3.9"
+    },
+    {
+      "deprecated": "typing.Deque, typing.DefaultDict, typing.OrderedDict, typing.Counter, typing.ChainMap",
+      "replacement": "collections.deque[], collections.defaultdict[], etc.",
+      "since_version": "3.9",
+      "removed_in": null,
+      "notes": "Use the actual collection classes with subscripting since 3.9"
+    },
+    {
+      "deprecated": "typing.Pattern, typing.Match",
+      "replacement": "re.Pattern[], re.Match[]",
+      "since_version": "3.9",
+      "removed_in": null,
+      "notes": "Use re module types directly since 3.9"
+    },
+    {
+      "deprecated": "typing.io and typing.re submodules",
+      "replacement": "Import from io and re directly",
+      "since_version": "3.8",
+      "removed_in": "3.13",
+      "notes": "typing.io and typing.re namespaces removed in Python 3.13"
+    },
+    {
+      "deprecated": "typing.no_type_check_decorator",
+      "replacement": "No direct replacement",
+      "since_version": "3.13",
+      "removed_in": null,
+      "notes": "Deprecated since Python 3.13"
+    },
+    {
+      "deprecated": "@asyncio.coroutine decorator",
+      "replacement": "async def",
+      "since_version": "3.8",
+      "removed_in": "3.11",
+      "notes": "Generator-based coroutines deprecated in 3.8; removed in 3.11. Use async def"
+    },
+    {
+      "deprecated": "yield from in coroutines",
+      "replacement": "await expression",
+      "since_version": "3.8",
+      "removed_in": "3.11",
+      "notes": "Generator-based coroutine syntax removed in 3.11; use await"
+    },
+    {
+      "deprecated": "Explicit loop parameter in asyncio functions",
+      "replacement": "Omit loop parameter (uses running loop automatically)",
+      "since_version": "3.8",
+      "removed_in": "3.10",
+      "notes": "Removed in 3.10 from asyncio.sleep, gather, shield, wait_for, wait, Lock, Event, Semaphore, Queue, etc."
+    },
+    {
+      "deprecated": "asyncio.get_event_loop() outside async context",
+      "replacement": "asyncio.run() or asyncio.get_running_loop()",
+      "since_version": "3.10",
+      "removed_in": null,
+      "notes": "Raises DeprecationWarning in 3.10+ when no running loop; raises RuntimeError in 3.14+. Use asyncio.run() as entry point"
+    },
+    {
+      "deprecated": "asyncio.iscoroutinefunction()",
+      "replacement": "inspect.iscoroutinefunction()",
+      "since_version": "3.12",
+      "removed_in": null,
+      "notes": "Deprecated in 3.12; will be removed in 3.16. Use inspect.iscoroutinefunction()"
+    },
+    {
+      "deprecated": "cgi, cgitb modules",
+      "replacement": "http.server or WSGI/ASGI frameworks",
+      "since_version": "3.11",
+      "removed_in": "3.13",
+      "notes": "Dead batteries: removed in Python 3.13 along with 17 other legacy stdlib modules"
+    },
+    {
+      "deprecated": "aifc, audioop, chunk, crypt, imghdr, mailcap, msilib, nis, nntplib, ossaudiodev, pipes, sndhdr, spwd, sunau, telnetlib, uu, xdrlib",
+      "replacement": "Third-party packages or modern alternatives",
+      "since_version": "3.11",
+      "removed_in": "3.13",
+      "notes": "PEP 594 dead batteries: 19 legacy modules deprecated in 3.11 and removed in 3.13"
+    },
+    {
+      "deprecated": "2to3 tool and lib2to3 module",
+      "replacement": "No replacement needed (Python 2 migration is complete)",
+      "since_version": "3.11",
+      "removed_in": "3.13",
+      "notes": "Removed in Python 3.13; Python 2 migration tooling no longer maintained"
+    },
+    {
+      "deprecated": "tkinter.tix module",
+      "replacement": "tkinter.ttk",
+      "since_version": "3.6",
+      "removed_in": "3.13",
+      "notes": "Removed in Python 3.13; use tkinter.ttk widgets instead"
+    },
+    {
+      "deprecated": "distutils module",
+      "replacement": "setuptools and packaging",
+      "since_version": "3.10",
+      "removed_in": "3.12",
+      "notes": "Removed in Python 3.12; use setuptools for building and packaging for metadata"
+    },
+    {
+      "deprecated": "unittest.makeSuite(), unittest.getTestCaseNames(), unittest.findTestCases()",
+      "replacement": "unittest.TestLoader methods",
+      "since_version": "3.11",
+      "removed_in": "3.13",
+      "notes": "Deprecated in 3.11 and removed in 3.13; use TestLoader directly"
+    }
+  ],
+  "go": [
+    {
+      "deprecated": "io/ioutil package",
+      "replacement": "io and os packages",
+      "since_version": "1.16",
+      "removed_in": null,
+      "notes": "ioutil.ReadAll -> io.ReadAll, ioutil.ReadFile -> os.ReadFile, ioutil.WriteFile -> os.WriteFile, ioutil.TempDir -> os.MkdirTemp, ioutil.TempFile -> os.CreateTemp, ioutil.ReadDir -> os.ReadDir, ioutil.NopCloser -> io.NopCloser, ioutil.Discard -> io.Discard"
+    },
+    {
+      "deprecated": "golang.org/x/net/context",
+      "replacement": "context (standard library)",
+      "since_version": "1.7",
+      "removed_in": null,
+      "notes": "The context package was moved to stdlib in Go 1.7; x/net/context is a shim that just re-exports it"
+    },
+    {
+      "deprecated": "golang.org/x/xerrors",
+      "replacement": "errors and fmt packages (stdlib)",
+      "since_version": "1.13",
+      "removed_in": null,
+      "notes": "errors.Is, errors.As, errors.Unwrap, fmt.Errorf with %w added in Go 1.13; xerrors is deprecated"
+    },
+    {
+      "deprecated": "math/rand.Seed()",
+      "replacement": "math/rand/v2 or math/rand.New(math/rand.NewSource(seed))",
+      "since_version": "1.20",
+      "removed_in": null,
+      "notes": "Global Seed deprecated in Go 1.20. For reproducible sequences use rand.New(). For general random, use math/rand/v2"
+    },
+    {
+      "deprecated": "math/rand.Read()",
+      "replacement": "crypto/rand.Read() or math/rand/v2.ChaCha8.Read()",
+      "since_version": "1.20",
+      "removed_in": null,
+      "notes": "math/rand.Read deprecated; use crypto/rand for cryptographic randomness"
+    },
+    {
+      "deprecated": "math/rand (entire package for new code)",
+      "replacement": "math/rand/v2",
+      "since_version": "1.22",
+      "removed_in": null,
+      "notes": "math/rand/v2 introduced in Go 1.22 with better APIs and generators (PCG, ChaCha8). Prefer v2 for new code"
+    },
+    {
+      "deprecated": "golang.org/x/exp/rand",
+      "replacement": "math/rand/v2",
+      "since_version": "1.22",
+      "removed_in": null,
+      "notes": "Experimental rand package deprecated in favor of stdlib math/rand/v2"
+    },
+    {
+      "deprecated": "errors.As with manual type assertion pattern",
+      "replacement": "errors.AsType[T](err) (Go 1.26+)",
+      "since_version": "1.26",
+      "removed_in": null,
+      "notes": "errors.AsType provides type-safe alternative to errors.As without manual var declaration. go fix can auto-update"
+    },
+    {
+      "deprecated": "sort.Sort()",
+      "replacement": "slices.Sort() or slices.SortFunc()",
+      "since_version": "1.21",
+      "removed_in": null,
+      "notes": "slices.Sort and slices.SortFunc introduced in 1.21 are simpler and faster; sort.Sort still works but is legacy"
+    },
+    {
+      "deprecated": "interface{} (empty interface)",
+      "replacement": "any",
+      "since_version": "1.18",
+      "removed_in": null,
+      "notes": "any is an alias for interface{} since Go 1.18; any is preferred in new code"
+    },
+    {
+      "deprecated": "go get for installing executables",
+      "replacement": "go install",
+      "since_version": "1.17",
+      "removed_in": "1.18",
+      "notes": "go get no longer builds packages since Go 1.18; use go install for executables"
+    },
+    {
+      "deprecated": "GOPATH mode",
+      "replacement": "Go modules (go.mod)",
+      "since_version": "1.11",
+      "removed_in": "1.17",
+      "notes": "GOPATH mode deprecated since modules introduced in 1.11; module mode is default since 1.16; GOPATH mode removed in 1.17"
+    }
+  ],
+  "css_tailwind": [
+    {
+      "deprecated": "tailwind.config.js / tailwind.config.ts",
+      "replacement": "@theme directive in CSS file",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Tailwind v4 moves all configuration to CSS using @theme directives. JS config files no longer required"
+    },
+    {
+      "deprecated": "@layer utilities / @layer components (for custom classes)",
+      "replacement": "@utility API",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Tailwind v4 uses native CSS cascade layers; custom utility classes must use the @utility API"
+    },
+    {
+      "deprecated": "bg-opacity-*, text-opacity-*, border-opacity-*, ring-opacity-*, divide-opacity-*, placeholder-opacity-*",
+      "replacement": "Slash opacity modifier (e.g., bg-blue-500/50, text-white/80)",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "All separate opacity utilities removed in v4; use color/opacity syntax"
+    },
+    {
+      "deprecated": "bg-gradient-to-* (e.g., bg-gradient-to-r)",
+      "replacement": "bg-linear-to-* (e.g., bg-linear-to-r)",
+      "since_version": "4.0",
+      "removed_in": "4.1",
+      "notes": "Gradient classes renamed for consistency; deprecated in 4.0, removed in 4.1"
+    },
+    {
+      "deprecated": "flex-grow / flex-shrink",
+      "replacement": "grow / shrink",
+      "since_version": "3.0",
+      "removed_in": "4.1",
+      "notes": "Shorthand aliases added in v3; old long names removed in v4.1"
+    },
+    {
+      "deprecated": "overflow-ellipsis",
+      "replacement": "text-ellipsis",
+      "since_version": "3.0",
+      "removed_in": "4.1",
+      "notes": "Renamed for clarity; removed in v4.1"
+    },
+    {
+      "deprecated": "decoration-slice / decoration-clone",
+      "replacement": "box-decoration-slice / box-decoration-clone",
+      "since_version": "4.0",
+      "removed_in": "4.1",
+      "notes": "Renamed to match CSS property name"
+    },
+    {
+      "deprecated": "!prefix for important (e.g., !flex)",
+      "replacement": "suffix ! for important (e.g., flex!)",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Important modifier moved from prefix to suffix in v4; old syntax still supported but deprecated"
+    },
+    {
+      "deprecated": "outline-none",
+      "replacement": "outline-hidden",
+      "since_version": "4.0",
+      "removed_in": "4.1",
+      "notes": "Renamed for clarity; outline-none now maps to outline-style: none in v4"
+    },
+    {
+      "deprecated": "shadow-sm, shadow-md, blur-sm, rounded-sm (old scale)",
+      "replacement": "shadow-xs (was shadow-sm), shadow-sm (was shadow), etc.",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "Size scale shifted in v4: xs was added, all sizes renamed down. Use npx @tailwindcss/upgrade to auto-convert"
+    },
+    {
+      "deprecated": "Vendor-prefixed CSS properties (-webkit-border-radius, -moz-border-radius, etc.)",
+      "replacement": "Standard unprefixed properties (border-radius, etc.)",
+      "since_version": null,
+      "removed_in": null,
+      "notes": "Most vendor prefixes unnecessary in modern browsers. Use Autoprefixer/PostCSS if needed. Only -webkit- still needed for a few Safari properties"
+    },
+    {
+      "deprecated": "float/clear layout patterns",
+      "replacement": "Flexbox and CSS Grid",
+      "since_version": null,
+      "removed_in": null,
+      "notes": "Not formally deprecated in CSS spec but float-based layouts are a legacy pattern. Use flex/grid"
+    }
+  ],
+  "prisma": [
+    {
+      "deprecated": "prisma.$use() (client middleware)",
+      "replacement": "Prisma Client Extensions",
+      "since_version": "4.16",
+      "removed_in": "6.14",
+      "notes": "Client middleware deprecated in 4.16; removed in 6.14. Use Client Extensions ($extends) for query interception"
+    },
+    {
+      "deprecated": "rejectOnNotFound option on findUnique/findFirst",
+      "replacement": "findUniqueOrThrow() / findFirstOrThrow()",
+      "since_version": "4.0",
+      "removed_in": "5.0",
+      "notes": "rejectOnNotFound removed in Prisma 5; use OrThrow variants instead"
+    },
+    {
+      "deprecated": "NotFoundError class",
+      "replacement": "PrismaClientKnownRequestError with code P2025",
+      "since_version": "6.0",
+      "removed_in": "6.0",
+      "notes": "NotFoundError removed in Prisma 6; findUniqueOrThrow and findFirstOrThrow now throw PrismaClientKnownRequestError with P2025"
+    },
+    {
+      "deprecated": "Buffer type for Bytes fields",
+      "replacement": "Uint8Array",
+      "since_version": "6.0",
+      "removed_in": "6.0",
+      "notes": "Prisma 6 uses Uint8Array instead of Buffer for Bytes fields"
+    },
+    {
+      "deprecated": "Imports from @prisma/client/runtime",
+      "replacement": "Import from @prisma/client directly",
+      "since_version": "4.10",
+      "removed_in": "5.0",
+      "notes": "Runtime imports deprecated in 4.10; import from @prisma/client instead"
+    },
+    {
+      "deprecated": "Prisma Client without driver adapter (Prisma 7)",
+      "replacement": "PrismaClient with explicit driver adapter",
+      "since_version": "7.0",
+      "removed_in": null,
+      "notes": "Prisma 7 requires a driver adapter for all databases, making the client more lean and modular"
+    },
+    {
+      "deprecated": "fullTextSearch preview feature for PostgreSQL",
+      "replacement": "fullTextSearchPostgres preview feature",
+      "since_version": "6.0",
+      "removed_in": null,
+      "notes": "fullTextSearch is GA for MySQL only; PostgreSQL users must use fullTextSearchPostgres preview feature"
+    },
+    {
+      "deprecated": "prisma db push for production",
+      "replacement": "prisma migrate deploy",
+      "since_version": null,
+      "removed_in": null,
+      "notes": "Not formally deprecated but db push is for prototyping only; use migrate deploy in production"
+    }
+  ],
+  "zod": [
+    {
+      "deprecated": "z.string().email(), z.string().uuid(), z.string().url() (method chaining for formats)",
+      "replacement": "z.email(), z.uuid(), z.url() (top-level functions)",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "String format validators moved from methods to top-level functions in Zod 4. Method forms deprecated"
+    },
+    {
+      "deprecated": "z.string().emoji(), z.string().base64(), z.string().nanoid(), z.string().cuid(), z.string().cuid2(), z.string().ulid()",
+      "replacement": "z.emoji(), z.base64(), z.nanoid(), z.cuid(), z.cuid2(), z.ulid()",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "All string format validators moved to top-level in Zod 4"
+    },
+    {
+      "deprecated": "z.string().ipv4(), z.string().ipv6(), z.string().cidrv4(), z.string().cidrv6()",
+      "replacement": "z.ipv4(), z.ipv6(), z.cidrv4(), z.cidrv6()",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "IP and CIDR validators moved to top-level in Zod 4"
+    },
+    {
+      "deprecated": "message parameter for error customization",
+      "replacement": "error parameter",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Zod 4 standardizes on 'error' param for error customization. 'message' still works but is deprecated"
+    },
+    {
+      "deprecated": "ZodError.format()",
+      "replacement": "z.treeifyError(zodError)",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Instance method deprecated in favor of top-level z.treeifyError()"
+    },
+    {
+      "deprecated": "ZodError.flatten()",
+      "replacement": "z.treeifyError(zodError)",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Instance method deprecated in favor of top-level z.treeifyError()"
+    },
+    {
+      "deprecated": ".strict() and .passthrough() on object schemas",
+      "replacement": "z.strictObject() and z.looseObject()",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Methods still exist for backward compatibility but top-level functions are preferred in Zod 4"
+    },
+    {
+      "deprecated": "z.string().uuid() (v3 behavior)",
+      "replacement": "z.guid() for v3-compatible behavior, z.uuid() for RFC 4122 strict",
+      "since_version": "4.0",
+      "removed_in": null,
+      "notes": "Zod 4 z.uuid() enforces strict RFC 4122; v3's z.string().uuid() was looser. Use z.guid() for backward compatibility"
+    },
+    {
+      "deprecated": "z.promise()",
+      "replacement": "Await the value before parsing",
+      "since_version": "4.0",
+      "removed_in": "4.0",
+      "notes": "z.promise() removed in Zod 4; await values before passing to schema validation"
+    }
+  ],
+  "authjs_nextauth": [
+    {
+      "deprecated": "next-auth/next imports",
+      "replacement": "Import directly from next-auth",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "In Auth.js v5, import from 'next-auth' directly, not 'next-auth/next'"
+    },
+    {
+      "deprecated": "next-auth/middleware import",
+      "replacement": "Import from next-auth directly",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "Middleware export is now from the main next-auth package"
+    },
+    {
+      "deprecated": "NEXTAUTH_URL environment variable",
+      "replacement": "AUTH_URL (or auto-detected in most environments)",
+      "since_version": "5.0",
+      "removed_in": null,
+      "notes": "NEXTAUTH_ prefix replaced with AUTH_ prefix. AUTH_URL is not strictly necessary in most environments"
+    },
+    {
+      "deprecated": "NEXTAUTH_SECRET environment variable",
+      "replacement": "AUTH_SECRET",
+      "since_version": "5.0",
+      "removed_in": null,
+      "notes": "All NEXTAUTH_ env vars should be renamed to AUTH_ prefix"
+    },
+    {
+      "deprecated": "getServerSession(authOptions)",
+      "replacement": "auth() function",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "In v5, a single auth() function replaces getServerSession for all server-side auth checks"
+    },
+    {
+      "deprecated": "getSession() client-side",
+      "replacement": "useSession() hook or auth() server-side",
+      "since_version": "5.0",
+      "removed_in": null,
+      "notes": "Prefer useSession() in client components or auth() in server components"
+    },
+    {
+      "deprecated": "NextAuth(authOptions) default export in [...nextauth]/route.ts",
+      "replacement": "Named GET/POST exports from auth handler",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "v5 uses named exports: export const { GET, POST } = handlers where handlers comes from NextAuth config"
+    },
+    {
+      "deprecated": "OAuth 1.0 provider support",
+      "replacement": "OAuth 2.0 providers only",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "OAuth 1.0 support removed in v5. Remove oauth_token_secret and oauth_token from account table"
+    },
+    {
+      "deprecated": "next-auth.session-token cookie name",
+      "replacement": "authjs.session-token cookie name",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "Cookie prefix changed from next-auth to authjs. Existing sessions break on upgrade; plan migration carefully"
+    },
+    {
+      "deprecated": "JWT without salt in encryption",
+      "replacement": "JWT with salt in key derivation",
+      "since_version": "5.0",
+      "removed_in": "5.0",
+      "notes": "v5 uses salt in JWT encryption by default, changing the key derivation process from v4. Tokens are incompatible across versions"
+    },
+    {
+      "deprecated": "adapter-specific session handling",
+      "replacement": "Unified session strategy configuration",
+      "since_version": "5.0",
+      "removed_in": null,
+      "notes": "v5 built on @auth/core with stricter OAuth/OIDC compliance. Minimum Next.js 14.0 required"
+    }
+  ]
+}

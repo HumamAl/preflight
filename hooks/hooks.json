@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -euo pipefail; INPUT=$(cat); CMD=\"\"; if command -v jq >/dev/null 2>&1; then CMD=$(printf \"%s\" \"$INPUT\" | jq -r \".tool_input.command // empty\" 2>/dev/null) || CMD=\"\"; fi; if [ -z \"$CMD\" ]; then CMD=$(printf \"%s\" \"$INPUT\" | sed -n '\"'\"'s/.*\"command\"[[:space:]]*:[[:space:]]*\"\\(.*\\)\".*/\\1/p'\"'\"' | head -1); fi; if [ -z \"$CMD\" ]; then echo \"{}\"; exit 0; fi; NEEDS_PREFLIGHT=0; STRIPPED=$(printf \"%s\" \"$CMD\" | sed '\"'\"'s/^[A-Z_]*=[^ ]* *//g'\"'\"'); case \"$STRIPPED\" in git\\ commit*|git\\ merge\\ --no-ff*|git\\ push*) NEEDS_PREFLIGHT=1 ;; esac; if [ \"$NEEDS_PREFLIGHT\" -eq 1 ]; then printf \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"additionalContext\\\":\\\"PREFLIGHT REQUIRED: Before proceeding with this git operation, run /preflight to verify the staged changes. Do not continue until /preflight passes with zero findings.\\\"}}\"; else echo \"{}\"; fi'",
+            "timeout": 10,
+            "statusMessage": "Checking for git operations..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -euo pipefail; ROOT=\"${CLAUDE_PLUGIN_ROOT:-}\"; PATTERNS=0; DEPRECATED=0; PHANTOMS=0; if [ -n \"$ROOT\" ] && [ -d \"$ROOT/data\" ]; then if command -v jq >/dev/null 2>&1; then PATTERNS=$(jq \".patterns | length\" \"$ROOT/data/ai-failure-patterns.json\" 2>/dev/null || echo 0); DEPRECATED=$(jq \".apis | length\" \"$ROOT/data/deprecated-apis.json\" 2>/dev/null || echo 0); PHANTOMS=$(jq \".packages | length\" \"$ROOT/data/phantom-packages.json\" 2>/dev/null || echo 0); else PATTERNS=$(grep -c '\"pattern\"' \"$ROOT/data/ai-failure-patterns.json\" 2>/dev/null || echo 0); DEPRECATED=$(grep -c '\"api\"' \"$ROOT/data/deprecated-apis.json\" 2>/dev/null || echo 0); PHANTOMS=$(grep -c '\"package\"' \"$ROOT/data/phantom-packages.json\" 2>/dev/null || echo 0); fi; fi; DISMISSED=0; DATA=\"${CLAUDE_PLUGIN_DATA:-}\"; if [ -n \"$DATA\" ] && [ -f \"$DATA/dismissed-findings.json\" ]; then if command -v jq >/dev/null 2>&1; then DISMISSED=$(jq \". | length\" \"$DATA/dismissed-findings.json\" 2>/dev/null || echo 0); else DISMISSED=$(grep -c '\"id\"' \"$DATA/dismissed-findings.json\" 2>/dev/null || echo 0); fi; fi; printf \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"Preflight plugin active. Pattern database: %s failure patterns, %s deprecated APIs, %s phantom packages. Dismissed findings: %s. Run /preflight before committing.\\\"}}\" \"$PATTERNS\" \"$DEPRECATED\" \"$PHANTOMS\" \"$DISMISSED\"'",
+            "timeout": 10,
+            "statusMessage": "Loading preflight plugin..."
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Preflight plugin is active. Remember: run /preflight before any git commit, merge, or push.\"}}'",
+            "timeout": 5,
+            "statusMessage": "Restoring preflight context..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -euo pipefail; DATA=\"${CLAUDE_PLUGIN_DATA:-}\"; if [ -z \"$DATA\" ]; then echo \"{}\"; exit 0; fi; mkdir -p \"$DATA\"; STATS_FILE=\"$DATA/session-stats.json\"; INPUT=$(cat); SESSION_ID=\"\"; if command -v jq >/dev/null 2>&1; then SESSION_ID=$(printf \"%s\" \"$INPUT\" | jq -r \".session_id // empty\" 2>/dev/null) || SESSION_ID=\"\"; fi; if [ -z \"$SESSION_ID\" ]; then SESSION_ID=\"unknown\"; fi; TIMESTAMP=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\" 2>/dev/null || date +\"%Y-%m-%d\" 2>/dev/null || echo \"unknown\"); ENTRY=$(printf \"{\\\"session_id\\\":\\\"%s\\\",\\\"ended_at\\\":\\\"%s\\\"}\" \"$SESSION_ID\" \"$TIMESTAMP\"); if [ -f \"$STATS_FILE\" ]; then if command -v jq >/dev/null 2>&1; then jq --argjson entry \"$ENTRY\" \". += [$entry]\" \"$STATS_FILE\" > \"$STATS_FILE.tmp\" && mv \"$STATS_FILE.tmp\" \"$STATS_FILE\" 2>/dev/null || echo \"[$ENTRY]\" > \"$STATS_FILE\"; else EXISTING=$(cat \"$STATS_FILE\"); printf \"%s\" \"$EXISTING\" | sed \"s/]$/,$ENTRY]/\" > \"$STATS_FILE\" 2>/dev/null || echo \"[$ENTRY]\" > \"$STATS_FILE\"; fi; else echo \"[$ENTRY]\" > \"$STATS_FILE\"; fi; echo \"{}\"'",
+            "timeout": 10,
+            "statusMessage": "Saving session stats..."
+          }
+        ]
+      }
+    ]
+  }
+}
