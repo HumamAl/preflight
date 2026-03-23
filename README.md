@@ -4,9 +4,9 @@
 
 # /preflight
 
-**AI-generated code ships 1.7x more bugs than human-written code.** Your linter catches none of them. Your reviewer catches them after they hit production. /preflight catches them before they leave your machine.
+**AI-generated code ships with bugs your linter will never catch.** Hallucinated APIs, phantom packages, arguments in the wrong order -- all confident, all plausible, all wrong. /preflight catches them before they leave your machine.
 
-> A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that intercepts `git commit` and verifies AI-generated code for hallucinated APIs, phantom packages, and plausible-but-wrong logic -- the failure modes no existing tool catches.
+> A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that intercepts `git commit` and verifies AI-generated code for hallucinated APIs, phantom packages, and plausible-but-wrong logic -- the failure modes no existing tool detects.
 
 ---
 
@@ -42,11 +42,29 @@
 
 ---
 
+## Quick start
+
+```bash
+# Install the plugin (one command, no config, no API keys)
+claude plugin install github:HumamAl/preflight
+
+# That's it. On your next commit, /preflight runs automatically.
+# Or run it manually anytime:
+/preflight
+
+# Want deeper checks?
+/preflight --security           # add OWASP top 10 + secret detection
+/preflight --strict             # lower confidence threshold, catch more
+/preflight src/api/**           # scope to specific files
+```
+
+---
+
 ## Why this exists
 
 AI coding tools are extraordinary. They are also confidently wrong in ways that slip past every existing check.
 
-- **1.7x more issues** than human-written code -- [CodeRabbit State of AI in Code Reviews, 2025](https://www.coderabbit.ai/blog/the-state-of-ai-code-review-2025)
+- **1.7x more issues** in AI-generated code than human-written code -- [CodeRabbit State of AI in Code Reviews, 2025](https://www.coderabbit.ai/blog/the-state-of-ai-code-review-2025)
 - **66% of developers** say "almost right but not quite" is their top AI frustration -- [Stack Overflow Developer Survey, 2025](https://survey.stackoverflow.co/2025/)
 - **19% slower** task completion when using AI assistants on unfamiliar codebases -- [METR Study, 2025](https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/)
 - LLMs hallucinate with confidence: fabricated package names, methods that do not exist on the types they reference, inverted conditions that read naturally but fail at runtime
@@ -60,7 +78,7 @@ Every existing code review tool checks **after you push**. /preflight checks **b
 | | **/preflight** | **CodeRabbit** | **Copilot Review** |
 |---|---|---|---|
 | **When it runs** | Before commit (local) | After push (PR) | After push (PR) |
-| **AI-specific patterns** | Yes -- phantom packages, hallucinated APIs, wrong argument order | General code quality | General code quality |
+| **AI-specific patterns** | Phantom packages, hallucinated APIs, wrong argument order | General code quality | General code quality |
 | **Fix generation** | Every finding includes `fixed_code` | Suggestions in PR comments | Suggestions in PR comments |
 | **Verification method** | Checks against your actual `node_modules`, type definitions, and source | LLM analysis of diff | LLM analysis of diff |
 | **False positive control** | Confidence scoring (0-100) + evidence requirement + memory | LLM judgment | LLM judgment |
@@ -68,17 +86,7 @@ Every existing code review tool checks **after you push**. /preflight checks **b
 | **Cost** | Free (uses your Claude Code session) | Free tier + paid plans | Included with Copilot |
 | **Complementary?** | Use /preflight locally, CodeRabbit/Copilot on PR | Yes | Yes |
 
-These tools are complementary. /preflight catches AI-specific bugs locally before they ever reach a PR reviewer.
-
----
-
-## Install
-
-```bash
-claude plugin install github:HumamAl/preflight
-```
-
-That is it. No config files, no CI setup, no API keys. The plugin activates immediately on your next Claude Code session.
+These tools solve different problems at different stages. /preflight catches AI-specific bugs locally before they ever reach a PR reviewer. Use them together.
 
 ---
 
@@ -92,8 +100,9 @@ That is it. No config files, no CI setup, no API keys. The plugin activates imme
 | **Confident wrong types** | High | `as unknown as User` bypassing type safety with no runtime check |
 | **Deprecated API usage** | Medium | `ReactDOM.render()` in a React 18 project |
 | **Missing error handling** | Medium | `JSON.parse(input)` without try/catch when the rest of the codebase wraps it |
-| **Test coverage gaps** | Medium | New exported function with zero test coverage (with `--test-gaps`) |
 | **Security vulnerabilities** | Varies | Unsanitized user input in SQL queries (with `--security`) |
+
+The pattern database currently covers 31 AI failure patterns, 128 known phantom package names (79 npm, 49 Python), and 180 deprecated API entries across 11 ecosystems.
 
 ---
 
@@ -101,7 +110,7 @@ That is it. No config files, no CI setup, no API keys. The plugin activates imme
 
 Being honest about limitations:
 
-- **Style and formatting.** Use Prettier or ESLint for that. /preflight only catches bugs.
+- **Style and formatting.** Use Prettier or ESLint. /preflight only catches bugs.
 - **Architecture decisions.** It will not tell you to use a different pattern or library.
 - **Performance issues.** Unless the code is broken, /preflight does not flag "could be faster."
 - **Non-AI bugs.** The detection patterns are weighted toward LLM failure modes. A null pointer you wrote yourself might slip through.
@@ -124,11 +133,18 @@ If you want a general-purpose code reviewer, use CodeRabbit or Copilot Review. I
 **Flags:**
 
 ```
-/preflight              # standard check (confidence threshold: 80)
-/preflight --strict     # lower threshold (60) -- catches more, may have false positives
-/preflight --paranoid   # lowest threshold (40) -- flags anything remotely suspicious
-/preflight --security   # include security vulnerability scan
-/preflight --test-gaps  # include test coverage gap analysis
+/preflight                   # standard check (confidence threshold: 60)
+/preflight --strict          # lower threshold (40) -- catches more, may have false positives
+/preflight --paranoid        # lowest threshold (20) -- flags anything remotely suspicious
+/preflight --security        # include OWASP top 10 + secret detection scan
+/preflight src/api/**        # scope to files matching a glob pattern
+```
+
+**Dismiss false positives:**
+
+```
+/preflight dismiss PHANTOM_PACKAGE      # stop flagging this pattern
+/preflight-stats                        # view accuracy and detection stats
 ```
 
 ---
@@ -144,32 +160,45 @@ If you want a general-purpose code reviewer, use CodeRabbit or Copilot Review. I
   +-----------------+
        |
        v
-  +----+----+
-  |         |
-  v         v
-bug-      test-gap-
-detector  analyzer      <-- subagent specialists (run in parallel)
-  |         |
-  v         v
-  +---------+
-  | merge findings, apply confidence threshold
-  +---------+
+  +---------------------------+
+  | detect project context    | ---- language, framework, package manager
+  +---------------------------+
        |
        v
-  +---------+-----+
-  | pass          | fail
-  v               v
-  commit          block + show report with
-  proceeds        findings and fix suggestions
+  +---------------------------+
+  | core verification         | ---- phantom packages, hallucinated APIs,
+  | (inline in skill)         |      wrong logic, deprecated APIs, missing
+  +---------------------------+      error handling, custom rules
+       |
+       +------ --security flag? ------+
+       |                              |
+       v                              v
+  (skip)                     +--------------------+
+                             | security-scanner   | ---- OWASP top 10,
+                             | (subagent)         |      secrets, injection
+                             +--------------------+
+       |                              |
+       v                              v
+  +-----------------------------------+
+  | merge findings, apply confidence  |
+  | threshold, check dismissed list   |
+  +-----------------------------------+
+       |
+       v
+  +----------+-----+
+  | pass           | fail
+  v                v
+  commit           block + show report with
+  proceeds         findings and fix suggestions
 ```
 
-1. **Hook triggers.** The PreToolUse hook detects `git commit` commands and injects a directive to run /preflight first.
+1. **Hook triggers.** The PreToolUse hook detects `git commit`, `git push`, and `git merge` commands and injects a directive to run /preflight first.
 2. **Diff extraction.** `get-staged-diff.sh` pulls the staged diff (or falls back to unstaged changes). POSIX-compliant, no dependencies.
-3. **Subagent analysis.** Two specialized agents run against the diff:
-   - `bug-detector` -- checks for phantom packages, hallucinated APIs, wrong logic, deprecated usage, missing error handling, and wrong types. Verifies every finding with actual tool use against the project's `node_modules`, type definitions, and source files.
-   - `test-gap-analyzer` -- maps changed files to test files and identifies untested functions, error paths, and edge cases.
-4. **Confidence scoring.** Each finding gets a 0-100 confidence score. Only findings above the threshold (default 80) are reported. This is how false positives are controlled.
-5. **Fix generation.** Every reported finding includes a concrete `fixed_code` suggestion, not just a description of what is wrong.
+3. **Project detection.** /preflight fingerprints your project: language, framework, package manager, test runner, error handling conventions. This context shapes what gets flagged and what gets accepted.
+4. **Core verification.** The skill checks for phantom packages, hallucinated APIs, wrong logic, deprecated usage, missing error handling, and custom rules. Every finding is verified with actual tool use against the project's `node_modules`, type definitions, and source files.
+5. **Security scanning (optional).** When `--security` is passed, a specialized security-scanner subagent runs OWASP top 10 checks, secret detection, and injection analysis.
+6. **Confidence scoring.** Each finding gets a 0-100 confidence score. Only findings above the threshold (default 60) are reported. Findings that cannot be backed by evidence are discarded. This is how false positives are controlled.
+7. **Fix generation.** Every reported finding includes a concrete `fixed_code` suggestion, not just a description of what is wrong.
 
 ---
 
@@ -225,9 +254,9 @@ No AI-specific bugs detected in this diff.
 
 | Mode | Threshold | Use case |
 |---|---|---|
-| Default | 80 | Daily use. High precision, minimal false positives. |
-| `--strict` | 60 | Pre-release verification. Catches more at the cost of some noise. |
-| `--paranoid` | 40 | Security-critical code. Flags anything remotely suspicious. |
+| Default | 60 | Daily use. High precision, minimal false positives. |
+| `--strict` | 40 | Pre-release verification. Catches more at the cost of some noise. |
+| `--paranoid` | 20 | Security-critical code. Flags anything remotely suspicious. |
 
 ### Custom rules
 
@@ -243,7 +272,7 @@ Add project-specific rules in `.claude/preflight/rules.md`:
 
 ### Shared memory
 
-`/preflight` tracks dismissed findings in `.claude/preflight/memory.json` to reduce repeat false positives. Commit this file to share learned context with your team.
+/preflight tracks dismissed findings in `.claude/preflight/memory.json` to reduce repeat false positives. Commit this file to share learned context with your team.
 
 ---
 
@@ -256,16 +285,19 @@ Those tools review code after you push. /preflight runs before you commit. They 
 `/review` is a generic code review. /preflight is specialized: it maintains a database of known AI hallucination patterns (phantom package names, deprecated API mixups, common argument swaps) and verifies every finding against your actual project state with tool use. It does not speculate.
 
 **What about false positives?**
-Confidence scoring is the primary defense. The default threshold of 80 is deliberately conservative. Every finding must be backed by evidence gathered through actual tool use -- grep results, file reads, type definition lookups. If a finding cannot be proven, it is discarded. Dismissed findings are tracked in memory to avoid repeats.
+Every finding must be backed by evidence gathered through actual tool use -- grep results, file reads, type definition lookups. If a finding cannot be proven, it is discarded. The default threshold of 60 is deliberately conservative. Dismissed findings are tracked in memory to avoid repeats. After three dismissals of the same pattern, it is auto-suppressed.
 
 **How fast is it?**
-Typically under 30 seconds for a normal commit. The two subagents run in parallel. Large diffs (500+ lines changed) may take longer.
+Typically under 30 seconds for a normal commit. Large diffs (500+ lines changed) may take longer. Adding `--security` spawns an additional agent, which adds time but runs in parallel with the core checks.
 
 **Does it work with non-AI code?**
 Yes. Phantom packages, hallucinated APIs, and missing error handling are bugs regardless of who wrote the code. But the detection patterns are weighted toward the mistakes LLMs make most often, so it is most valuable on AI-assisted codebases.
 
 **What languages are supported?**
-JavaScript, TypeScript, and Python have the deepest coverage (phantom package databases, API verification, deprecated pattern lists). The logic checks (inverted conditions, swapped arguments, missing error handling) work across any language.
+JavaScript, TypeScript, and Python have the deepest coverage (phantom package databases, API verification, deprecated pattern lists). The logic checks (inverted conditions, swapped arguments, missing error handling) work across any language. Go test fixtures are included and more languages are planned.
+
+**Can I use this in CI?**
+/preflight is designed as a local pre-commit check inside Claude Code. It is not a standalone CLI tool. For CI, use it alongside tools like CodeRabbit or Sonar that are built for that environment.
 
 ---
 
@@ -274,22 +306,39 @@ JavaScript, TypeScript, and Python have the deepest coverage (phantom package da
 ```
 preflight/
   .claude-plugin/
-    plugin.json              # Plugin manifest
+    plugin.json                  # Plugin manifest (name, version, author)
   .claude/
-    rules/                   # Custom rule overrides
+    rules/
+      preflight-conventions.md   # Confidence calibration, framework rules
   agents/
-    bug-detector.md          # Core verification agent
-    test-gap-analyzer.md     # Test coverage agent
+    bug-detector.md              # Core bug detection patterns
+    security-scanner.md          # OWASP top 10, secret detection
+    test-gap-analyzer.md         # Test coverage analysis
   hooks/
-    hooks.json               # PreToolUse + SessionStart hooks
+    hooks.json                   # PreToolUse, SessionStart, Stop hooks
   skills/
     preflight/
+      SKILL.md                   # /preflight command -- full verification workflow
       scripts/
-        get-staged-diff.sh   # Diff extraction (POSIX sh)
-  data/                      # Pattern databases (phantom packages, deprecated APIs)
-  templates/                 # Report templates
+        get-staged-diff.sh       # Diff extraction (POSIX sh)
+    preflight-dismiss/
+      SKILL.md                   # /preflight-dismiss -- manage false positives
+    preflight-stats/
+      SKILL.md                   # /preflight-stats -- view accuracy metrics
+  data/
+    ai-failure-patterns.json     # 31 common LLM code-generation failures
+    phantom-packages.json        # 128 frequently hallucinated package names
+    deprecated-apis.json         # 180 deprecated APIs across 11 ecosystems
+    false-positive-mitigations.json  # Mitigation strategies per pattern
+  templates/
+    report.md                    # Mustache template for output reports
+  scripts/
+    test-detection.sh            # Test runner for detection patterns
+    validate-plugin.sh           # Plugin structure validator
+  docs/
+    competitive-analysis.md      # Analysis of existing tools
   tests/
-    fixtures/                # Test cases for verification
+    fixtures/                    # Test cases (TS, Python, Go)
 ```
 
 ---
@@ -300,14 +349,14 @@ Contributions are welcome. Here is how to get started with the most common types
 
 ### Add a new hallucination pattern
 
-1. Open `agents/bug-detector.md`
-2. Find the detection category that fits (phantom packages, hallucinated APIs, wrong logic, etc.)
-3. Add the pattern with:
-   - A clear description of the hallucination
-   - At least one real-world example
-   - Verification steps (how to prove it is wrong using tool calls)
-   - A `fixed_code` example
-4. Open a PR
+1. Add the pattern to the appropriate JSON file in `data/`:
+   - Phantom package? Add to `data/phantom-packages.json` under the right ecosystem key (`npm` or `python`)
+   - Deprecated API? Add to `data/deprecated-apis.json` under the right ecosystem key
+   - General AI failure? Add to `data/ai-failure-patterns.json`
+2. Include a clear description, at least one real-world example, and the correct alternative
+3. Add a test fixture in `tests/fixtures/` that triggers the new pattern
+4. Run `scripts/test-detection.sh` to verify detection works
+5. Open a PR
 
 ### Report a false positive
 
@@ -321,17 +370,29 @@ This is one of the most valuable contributions. Every false positive report make
 
 ### Add language support
 
-The agent instructions in `agents/` are language-aware. To add a new language:
-1. Add package manager verification commands (equivalent to `npm search` / `pip show`)
-2. Add type definition lookup strategies
-3. Add common hallucination patterns specific to that language's ecosystem
-4. Add test fixtures in `tests/fixtures/`
+The detection logic is language-aware. To add a new language:
+1. Add phantom package entries for the ecosystem to `data/phantom-packages.json`
+2. Add deprecated API entries to `data/deprecated-apis.json`
+3. Add package manager verification commands in the SKILL.md project detection step
+4. Add framework-specific rules to `.claude/rules/preflight-conventions.md`
+5. Add test fixtures in `tests/fixtures/`
+
+### Run it locally
+
+```bash
+# Start Claude Code with the plugin loaded from your local clone
+claude --plugin-dir /path/to/preflight
+
+# Stage a test fixture and run preflight
+cp tests/fixtures/phantom-package.ts /tmp/test-repo/src/
+cd /tmp/test-repo && git add -A
+# Then inside Claude Code:
+/preflight
+```
 
 ---
 
 ## Research and references
-
-The problem /preflight solves is backed by real data:
 
 - [CodeRabbit: State of AI in Code Reviews, 2025](https://www.coderabbit.ai/blog/the-state-of-ai-code-review-2025) -- AI-generated code ships 1.7x more issues than human-written code
 - [Stack Overflow Developer Survey, 2025](https://survey.stackoverflow.co/2025/) -- 66% of developers cite "almost right but not quite" as their top AI frustration
