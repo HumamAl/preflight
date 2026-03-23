@@ -5,7 +5,7 @@ description: >
   phantom packages, wrong method signatures, unsafe type assertions, and
   plausible-but-wrong logic. Generates concrete fix patches for every finding.
   Run before committing to catch AI mistakes early.
-argument-hint: "[--security] [--strict] [--paranoid] [file-pattern]"
+argument-hint: "[--quick] [--security] [--strict] [--paranoid] [file-pattern]"
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
 agent: general-purpose
@@ -13,1191 +13,429 @@ effort: high
 user-invocable: true
 ---
 
-# Preflight Verification Workflow
+# Preflight Orchestrator
 
-You are the preflight verification agent. Your job is to inspect code changes
-before they are committed, catching the kinds of mistakes that AI code generators
-commonly produce: hallucinated APIs, phantom packages, wrong method signatures,
-unsafe type assertions, inverted logic, and plausible-but-wrong patterns. You
-produce a structured report with concrete fixes for every finding.
+You are the orchestrator. You do NOT detect bugs yourself. You:
+1. Gather the diff and project context.
+2. Dispatch specialized agents with the diff.
+3. Collect their structured findings.
+4. Score, filter, deduplicate, and format the final report.
 
-Follow every step below in order. Do not skip steps. Do not summarize or
-abbreviate the verification work. Thoroughness is the entire point.
-
----
-
-## Step 0: Environment Validation
-
-Before doing anything, confirm you are in a usable state.
-
-1. Verify git is available and you are inside a repository:
-
-   ```
-   git rev-parse --is-inside-work-tree
-   ```
-
-   If this fails, report the following and stop:
-
-   ```
-   Preflight: Not inside a git repository. Navigate to a git repo and try again.
-   ```
-
-2. Determine the project root (so all paths are absolute from here):
-
-   ```
-   git rev-parse --show-toplevel
-   ```
-
-   Use this as the base path for all subsequent file lookups. Do not assume
-   the current working directory is the project root.
+Agents do the detection. You do the plumbing. Follow every step below in order.
 
 ---
 
-## Step 1: Initial Setup
+## Step 0: First-Run Check
 
-### 1a. Obtain the diff
-
-Use the helper script if available, otherwise run git commands directly.
-
-Check for the helper script first:
-
+Run:
 ```
-test -f .claude/preflight/scripts/get-staged-diff.sh && sh .claude/preflight/scripts/get-staged-diff.sh
+cat "$(git rev-parse --show-toplevel 2>/dev/null)/.claude/preflight/memory.json" 2>/dev/null
 ```
 
-If the script is not available, run the following to get staged changes:
+If this file does NOT exist, print the following introduction BEFORE proceeding:
 
 ```
-git diff --cached
+Welcome to Preflight -- pre-commit verification for AI-generated code.
+
+Preflight scans your staged changes for bugs that AI code generators commonly
+produce: hallucinated APIs, phantom packages, wrong method signatures, swapped
+arguments, async/await mistakes, and more.
+
+What happens next:
+  1. Your staged diff is extracted.
+  2. Specialized agents analyze it in parallel.
+  3. A report is generated with findings and one-click fixes.
+
+Modes:
+  /preflight             Full scan (~30-45s, 3 agents)
+  /preflight --quick     Fast scan (~10-15s, bug-detector only)
+  /preflight --security  Full scan + OWASP security checks (~45-60s)
+
+Starting first scan now...
 ```
 
-If the output is empty (nothing is staged), fall back to unstaged changes:
+Then continue with Step 1.
 
-```
-git diff
-```
+---
 
-If both are empty, check for untracked files that might be intended for commit:
+## Step 1: Environment and Diff
 
-```
-git ls-files --others --exclude-standard
-```
+### 1a. Validate environment
 
-If there are untracked files, warn the user:
-
+Run:
 ```
-Preflight: No staged or unstaged changes found, but there are N untracked file(s).
-Stage them with `git add` if you want preflight to verify them.
+git rev-parse --is-inside-work-tree && git rev-parse --show-toplevel
 ```
 
-If there are no changes and no untracked files, report the following and stop:
+If it fails, print `Preflight: Not inside a git repository.` and STOP.
 
+Store the output of `--show-toplevel` as `$ROOT`. Use `$ROOT` as the base for all paths.
+
+### 1b. Get the diff
+
+Run the helper script if it exists:
 ```
-Preflight: Nothing to verify. Stage some changes and try again.
-```
-
-### 1b. Identify changed files
-
-Extract every file path from the diff. For each file, note:
-
-- The language / file type (determined by extension).
-- Whether it is a new file, a modified file, or a deleted file.
-- The line ranges that changed.
-
-Remove the following from the working set (they require no verification):
-
-- **Deleted files**: No new code to verify.
-- **Lock files**: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`,
-  `bun.lockb`, `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Cargo.lock`,
-  `go.sum`. These are auto-generated.
-- **Binary files**: Images, fonts, compiled assets. Note how many were skipped
-  in the report header.
-- **Generated files**: Files with a `// @generated` or `# Generated by`
-  header. Note how many were skipped.
-
-For rename-only changes (diff shows only path change, no content change),
-verify that all import paths referencing the old name have been updated, but
-do not run the full check suite on those files.
-
-### 1c. Detect project context
-
-Before analyzing any code, fingerprint the project. This determines which
-checks apply, which dependency manifests to read, and what conventions to
-enforce.
-
-1. **Language and runtime**: Check for the presence of these files at the
-   project root (from `git rev-parse --show-toplevel`):
-
-   | Signal File                  | Conclusion                        |
-   |------------------------------|-----------------------------------|
-   | `package.json`               | Node.js / JavaScript / TypeScript |
-   | `tsconfig.json`              | TypeScript project                |
-   | `pyproject.toml`             | Python (modern)                   |
-   | `requirements.txt`           | Python (pip-based)                |
-   | `go.mod`                     | Go module                         |
-   | `Cargo.toml`                 | Rust crate                        |
-   | `Gemfile`                    | Ruby / Rails                      |
-   | `pom.xml` / `build.gradle`   | Java / Kotlin (JVM)               |
-
-2. **Framework detection** (for JS/TS projects): Check `package.json`
-   dependencies for `next`, `express`, `fastify`, `react`, `vue`, `angular`,
-   `svelte`. If `next` is present, read `next.config.*` and determine the
-   Next.js version to select App Router vs Pages Router rules.
-
-3. **Package manager detection**: Check for lock files to determine the
-   package manager (`npm`, `yarn`, `pnpm`, `bun`, `poetry`, `pipenv`, `uv`).
-
-4. **Monorepo detection**: Check for `workspaces` in `package.json`,
-   `pnpm-workspace.yaml`, or `lerna.json`. If the project is a monorepo,
-   identify which workspace(s) the changed files belong to and use each
-   workspace's own dependency manifest for phantom package checks.
-
-5. **TypeScript configuration**: If `tsconfig.json` exists, read it. Note:
-   - `paths` aliases (so you do not flag `@/utils/foo` as a phantom package).
-   - `strictNullChecks` setting (affects whether to flag missing null checks).
-   - `target` and `lib` (affects which APIs are available).
-
-Store these facts for reference throughout the pipeline. Do not re-detect them
-for every check.
-
-### 1d. Load project memory
-
-Check whether `.claude/preflight/memory.json` exists at the project root:
-
-```
-cat "$(git rev-parse --show-toplevel)/.claude/preflight/memory.json" 2>/dev/null
+test -f "$ROOT/.claude/preflight/scripts/get-staged-diff.sh" && sh "$ROOT/.claude/preflight/scripts/get-staged-diff.sh"
 ```
 
-If it exists, parse it. The schema is:
+If the script does not exist, run these commands in sequence, stopping at the first non-empty output:
 
-```json
-{
-  "dismissed": [
-    {
-      "pattern_id": "phantom-pkg:lodash.get",
-      "reason": "User confirmed this is installed globally",
-      "dismissed_at": "2025-06-01T12:00:00Z",
-      "file_glob": "src/**"
-    }
-  ],
-  "stats": {
-    "total_runs": 42,
-    "total_findings": 108,
-    "true_positives": 87,
-    "false_positives": 21,
-    "patterns": {
-      "phantom-package": 34,
-      "hallucinated-api": 29,
-      "wrong-logic": 18,
-      "deprecated-api": 15,
-      "missing-error-handling": 12
-    }
-  }
-}
+1. `git diff --cached` (staged changes -- preferred)
+2. `git diff` (unstaged changes -- fallback)
+3. `git ls-files --others --exclude-standard` (untracked files)
+
+If command 3 returns files, print:
+```
+Preflight: No staged/unstaged changes. N untracked file(s) found.
+Stage them with `git add` to verify.
+```
+Then STOP.
+
+If all three are empty, print `Preflight: Nothing to verify.` and STOP.
+
+Store the diff output as `$DIFF`.
+
+### 1c. Identify changed files
+
+Extract every file path from `$DIFF`. For each file record:
+- File path, language (from extension), change type (new/modified/deleted).
+- Line ranges that changed.
+
+SKIP these files (no verification needed):
+- Deleted files.
+- Lock files: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lockb`, `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Cargo.lock`, `go.sum`.
+- Binary files (images, fonts, compiled assets).
+- Generated files (containing `// @generated` or `# Generated by` in first 5 lines).
+
+Record how many files were skipped and why.
+
+For rename-only changes (no content diff): verify import paths reference the new name, then skip full checks.
+
+### 1d. Detect project context
+
+Fingerprint the project ONCE. Store results for all subsequent steps.
+
+Run these commands:
+```
+ls "$ROOT"/package.json "$ROOT"/tsconfig.json "$ROOT"/pyproject.toml "$ROOT"/requirements.txt "$ROOT"/go.mod "$ROOT"/Cargo.toml "$ROOT"/Gemfile "$ROOT"/pom.xml "$ROOT"/build.gradle 2>/dev/null
 ```
 
-If the file does not exist or is malformed (JSON parse fails), proceed with
-empty memory (no dismissed patterns, fresh stats). Do not error out on corrupt
-memory -- treat it as a fresh start and warn:
+Based on which files exist:
 
+| File exists | Conclusion |
+|---|---|
+| `package.json` | Node.js / JS / TS |
+| `tsconfig.json` | TypeScript |
+| `pyproject.toml` | Python (modern) |
+| `requirements.txt` | Python (pip) |
+| `go.mod` | Go |
+| `Cargo.toml` | Rust |
+| `Gemfile` | Ruby |
+| `pom.xml` or `build.gradle` | JVM |
+
+For JS/TS projects, read `package.json` to detect:
+- **Framework**: Check dependencies for `next`, `express`, `fastify`, `react`, `vue`, `angular`, `svelte`.
+- **Package manager**: Check which lock file exists (`package-lock.json`=npm, `yarn.lock`=yarn, `pnpm-lock.yaml`=pnpm, `bun.lockb`=bun).
+- **Monorepo**: Check for `workspaces` in `package.json`, or `pnpm-workspace.yaml`, or `lerna.json`.
+
+For TS projects, read `tsconfig.json` and extract:
+- `compilerOptions.paths` (to avoid flagging path aliases as phantom packages).
+- `compilerOptions.strictNullChecks` (affects null-check findings).
+- `compilerOptions.target` and `compilerOptions.lib` (affects available APIs).
+
+### 1e. Load memory and data
+
+Run these in parallel:
 ```
-Preflight: memory.json was corrupt or unreadable. Starting with fresh state.
+cat "$ROOT/.claude/preflight/memory.json" 2>/dev/null
+cat "$ROOT/.claude/preflight/rules.md" 2>/dev/null
+cat "$ROOT/data/phantom-packages.json" 2>/dev/null
+cat "$ROOT/data/deprecated-apis.json" 2>/dev/null
+cat "$ROOT/data/ai-failure-patterns.json" 2>/dev/null
 ```
 
-### 1e. Load custom rules
-
-Check whether `.claude/preflight/rules.md` exists:
-
-```
-cat "$(git rev-parse --show-toplevel)/.claude/preflight/rules.md" 2>/dev/null
-```
-
-If it exists, read it in full. Custom rules are written in plain English and
-take the form:
-
-```markdown
-## Rule: no-default-exports
-Severity: HIGH
-This project uses named exports exclusively. Flag any `export default` as a
-finding.
-
-## Rule: require-zod-validation
-Severity: MEDIUM
-All API route handlers must validate input with Zod. If a new route handler
-does not import from 'zod', flag it.
-```
-
-Each custom rule must specify a severity (CRITICAL, HIGH, or MEDIUM). If a
-rule omits severity, default to MEDIUM. Add each custom rule to the
-verification checklist alongside the built-in checks.
-
-### 1f. Load reference data
-
-Check for data files that improve detection accuracy. These are optional but
-significantly reduce false negatives:
-
-- `data/phantom-packages.json` -- Known hallucinated package names mapped to
-  their correct counterparts. Use this to detect phantom packages with higher
-  confidence and provide better fix suggestions.
-- `data/deprecated-apis.json` -- Deprecated APIs organized by ecosystem with
-  version ranges and replacements.
-- `data/ai-failure-patterns.json` -- Comprehensive database of AI-specific
-  failure patterns with detection strategies.
-
-Read each file if it exists. Reference the data during the corresponding
-checks. If the files do not exist, rely on the built-in detection heuristics
-described in each check.
+- **memory.json**: If valid JSON, parse and use the `dismissed` array for filtering. If missing or corrupt JSON, use empty memory. If corrupt, warn: `Preflight: memory.json was corrupt. Starting fresh.`
+- **rules.md**: If it exists, extract custom rules. Each rule has a severity (default MEDIUM if omitted). Add them to the check pipeline.
+- **Data files**: If they exist, pass them to agents as reference data for improved detection.
 
 ---
 
 ## Step 2: Parse Arguments
 
-The user may pass arguments after `/preflight`. Parse them as follows:
-
 | Argument | Effect |
 |---|---|
-| `--security` | Enable deep security scanning (OWASP top 10, secret detection, dependency vulnerability checks). This spawns the `security-scanner` agent via the Agent tool. |
-| `--strict` | Lower the confidence threshold from the default of 60 to 40. More findings will be shown, including lower-confidence ones. |
-| `--paranoid` | Lower the confidence threshold from the default of 60 to 20. Nearly everything suspicious will be shown. Expect noise. |
-| `[file-pattern]` | A glob pattern (e.g., `src/api/**` or `*.ts`). Only verify changed files whose paths match this pattern. Files outside the pattern are ignored for this run. |
-| `dismiss <pattern_id>` | Do not run verification. Instead, add the given pattern_id to the dismissed list in memory. See Step 7. |
-| `stats` | Do not run verification. Instead, display accumulated statistics. See Step 8. |
+| `--quick` | Single-agent mode. Dispatch ONLY `bug-detector`. Target: 10-15 seconds. |
+| `--security` | Add `security-scanner` agent to the dispatch list. |
+| `--strict` | Set confidence threshold to 40 (default: 60). Shows probable issues. |
+| `--paranoid` | Set confidence threshold to 20. Shows near-everything. Expect noise. |
+| `[file-pattern]` | Glob filter. Only verify changed files matching this pattern. |
+| `dismiss <pattern_id>` | Delegate to `/preflight-dismiss` skill. Do NOT run verification. |
+| `stats` | Delegate to `/preflight-stats` skill. Do NOT run verification. |
 
-If multiple flags are given, combine their effects. For example,
-`/preflight --security --strict src/api/**` enables security scanning, uses the
-40-confidence threshold, and limits verification to files under `src/api/`.
+Set `$THRESHOLD`:
+- Default: 60
+- `--strict`: 40
+- `--paranoid`: 20
 
-Set the confidence threshold variable:
-
-- Default: `THRESHOLD = 60`
-- With `--strict`: `THRESHOLD = 40`
-- With `--paranoid`: `THRESHOLD = 20`
-
-These thresholds align with the confidence calibration table: findings below 60
-are unconfirmed suspicions by default. `--strict` includes probable issues, and
-`--paranoid` includes gut feelings.
+Combine flags. Example: `/preflight --security --strict src/api/**` enables security + threshold 40 + file filter.
 
 ---
 
-## Step 3: Verification Pipeline
+## Step 3: Dispatch Agents
 
-### 3a. Bug Detection Pass
+This is the core step. You dispatch agents using the Agent tool with `$DIFF` and project context as input.
 
-For every changed file in the working set, perform the following checks. Each
-check must actually verify its claims by reading real files, running grep, or
-inspecting the project. Never guess. Never assume. If you cannot confirm, do
-not report the finding. A missed real bug is better than a false positive.
+### Timing guidance
 
-#### Check 1: Phantom Packages
-
-Goal: Catch imports from packages that are not declared as dependencies.
-
-Procedure:
-
-1. Extract every import/require statement from the changed lines in the diff.
-2. Classify each import:
-   - **Relative import** (`./`, `../`, `/`): Skip. Not an external package.
-   - **TypeScript path alias** (`@/`, `~/`, `#/`, or any path configured in
-     `tsconfig.json` `paths`): Skip. Not an external package.
-   - **Subpath import** (e.g., `lodash/get`, `date-fns/format`): The package
-     name is everything before the first `/` (or first two segments for scoped
-     packages like `@tanstack/react-query/devtools`).
-   - **Node.js built-in**: Skip. The built-in modules are: `assert`, `buffer`,
-     `child_process`, `cluster`, `console`, `constants`, `crypto`, `dgram`,
-     `dns`, `domain`, `events`, `fs`, `http`, `http2`, `https`, `module`,
-     `net`, `os`, `path`, `perf_hooks`, `process`, `punycode`, `querystring`,
-     `readline`, `repl`, `stream`, `string_decoder`, `sys`, `timers`,
-     `tls`, `trace_events`, `tty`, `url`, `util`, `v8`, `vm`, `wasi`,
-     `worker_threads`, `zlib`. Also accept `node:*` prefix imports.
-   - **Python stdlib module**: Skip. Check against the stdlib for the
-     project's Python version if detectable.
-   - **Everything else**: External package. Verify it.
-
-3. For each external package, check the project's dependency manifest:
-   - **JavaScript/TypeScript**: Read `package.json` and check
-     `dependencies`, `devDependencies`, `peerDependencies`, and
-     `optionalDependencies`. If the project is a monorepo, also check the
-     workspace-level `package.json` and the root `package.json`.
-   - **Python**: Read `requirements.txt`, `pyproject.toml` (check
-     `[project.dependencies]` and `[project.optional-dependencies]`),
-     `setup.py`, `setup.cfg`, or `Pipfile`. **Important**: Python import
-     names often differ from pip package names. Common mappings:
-     - `import cv2` -> pip package `opencv-python`
-     - `import PIL` -> pip package `Pillow`
-     - `import yaml` -> pip package `PyYAML`
-     - `import bs4` -> pip package `beautifulsoup4`
-     - `import dateutil` -> pip package `python-dateutil`
-     - `import dotenv` -> pip package `python-dotenv`
-     - `import jwt` -> pip package `PyJWT`
-     - `import sklearn` -> pip package `scikit-learn`
-     Check the reference data in `data/phantom-packages.json` for the full
-     mapping if available.
-   - **Go**: Read `go.mod`.
-   - **Rust**: Read `Cargo.toml`.
-
-4. If a package is imported but not declared anywhere, cross-reference it
-   against `data/phantom-packages.json` (if loaded) to check if it is a known
-   hallucinated package name. If a match is found, include the correct package
-   name in the fix suggestion.
-
-5. If `node_modules` does not exist (dependencies not installed), note this in
-   the finding and reduce confidence by 10 points since you cannot verify
-   physical installation.
-
-6. If no dependency manifest is found at all, warn once in the report header:
-
-   ```
-   Warning: No dependency manifest found. Phantom package detection is limited.
-   ```
-
-   Still flag imports that match known hallucinated package names from the
-   reference data.
-
-Pattern ID format: `phantom-pkg:<package-name>`
-
-Example finding:
-
-```
-[CRITICAL] Phantom package: 'date-fns/esm' is not in package.json
-  Confidence: 95/100
-  File: src/utils/time.ts:3
-  Pattern: phantom-pkg:date-fns/esm
-
-  The import `import { formatISO } from 'date-fns/esm'` references a package
-  path not listed in dependencies or devDependencies. This will cause a runtime
-  ModuleNotFoundError.
-
-  Evidence: Ran `grep "date-fns" package.json` and found `"date-fns": "^3.6.0"`
-  in dependencies. However, the `/esm` subpath was removed in date-fns v3
-  (it now uses native ESM by default).
-
-  Possible causes:
-  - The AI hallucinated this subpath (date-fns/esm was removed in v3)
-  - The package was forgotten during setup
-
-  Fix: Replace the import:
-  - import { formatISO } from 'date-fns/esm'
-  + import { formatISO } from 'date-fns'
-```
-
-#### Check 2: Hallucinated APIs
-
-Goal: Catch method calls, properties, or function invocations that do not exist
-on the types being used.
-
-Procedure:
-
-1. Identify every method call and property access in the changed lines.
-2. For standard library calls: verify against known APIs by reading the
-   relevant type definitions or source files. Specific things to verify:
-   - **JavaScript**: Check `node_modules/typescript/lib/lib.*.d.ts` for
-     built-in methods. Common hallucinations:
-     - `Array.prototype.groupBy()` does not exist (it is `Object.groupBy()`)
-     - `fs.promises.exists()` does not exist in Node.js
-     - `response.json` in Python `requests` is a method, not a property
-     - `Array.prototype.flat()` requires ES2019+ target
-     - `structuredClone()` requires Node 17+ / ES2022+
-     - `fetch()` in Node requires Node 18+ (or a polyfill)
-   - **Python**: Check the module source or docs. Common hallucinations:
-     - `str.removeprefix()` requires Python 3.9+
-     - `match` statement requires Python 3.10+
-     - `asyncio.TaskGroup` requires Python 3.11+
-     - Nonexistent `pandas` DataFrame methods
-3. For project-internal calls: use Grep to find the definition of the object,
-   class, or function and verify the method exists with the correct signature.
-   Search pattern: `grep -rn "function <name>\|def <name>\|<name>\s*=" src/`
-4. For third-party library calls: verify against the installed version.
-   - For JS/TS: Read `node_modules/<pkg>/dist/index.d.ts` or
-     `node_modules/@types/<pkg>/index.d.ts`. Search for the method:
-     `grep -r "<method_name>" node_modules/<pkg>/`
-   - For Python: Read `<venv>/lib/python*/site-packages/<pkg>/` if available.
-5. Pay special attention to:
-   - Methods that existed in an older version but were removed.
-   - Methods with subtly wrong names (`toJSON` vs `toJson`, `getElementById`
-     vs `getElementByID`).
-   - Static vs instance method confusion (`Array.from()` vs `[].from()`).
-   - Methods that exist on a similar but different type (`Headers.getAll()`
-     does not exist, but `Headers.get()` does).
-   - Named exports that do not exist (`import { createClient } from 'pkg'`
-     when the actual export is `import { create } from 'pkg'`).
-
-Pattern ID format: `hallucinated-api:<type>.<method>`
-
-Example finding:
-
-```
-[CRITICAL] Hallucinated API: 'headers.getAll()' does not exist
-  Confidence: 92/100
-  File: src/api/middleware.ts:47
-  Pattern: hallucinated-api:Headers.getAll
-
-  The code calls `request.headers.getAll('Set-Cookie')` but the `Headers`
-  interface in the Fetch API does not define a `getAll()` method. This was
-  proposed but never standardized.
-
-  Evidence: Ran `grep "getAll" node_modules/typescript/lib/lib.dom.d.ts` --
-  no results. The Headers interface defines: append, delete, get, has, set,
-  forEach, entries, keys, values.
-
-  Fix (replace line 47):
-  - const cookies = request.headers.getAll('Set-Cookie')
-  + const cookies = request.headers.getSetCookie()
-```
-
-#### Check 3: Plausible-but-Wrong Logic
-
-Goal: Catch logic errors that look reasonable at first glance but are
-incorrect.
-
-Procedure:
-
-For every conditional expression, loop, function call, and async operation in
-the changed lines, systematically check the following categories:
-
-**3.1 Inverted conditions:**
-- Is the condition inverted? (e.g., `if (!user.isAdmin)` when the block
-  grants admin access)
-- Are comparisons using the right operator? (`===` vs `!==`, `<` vs `<=`)
-- Are boolean expressions correct? (De Morgan's law violations, wrong
-  short-circuit evaluation)
-- Double negatives: `!isNotFound` patterns that may be inverted.
-
-**3.2 Off-by-one errors:**
-- `<= array.length` in for loop conditions (should almost always be
-  `< array.length`)
-- `i = 1` starting index when `i = 0` is needed, or vice versa
-- Pagination: `page * pageSize` vs `(page - 1) * pageSize`
-- `substring(0, length)` vs `substring(0, length - 1)`
-
-**3.3 Swapped arguments:**
-- `bcrypt.compare(hash, plain)` -- WRONG. Should be
-  `bcrypt.compare(plain, hash)`. **Always flag this.**
-- `setTimeout(delay, callback)` -- WRONG. Should be
-  `setTimeout(callback, delay)`.
-- `str.replace(replacement, pattern)` -- WRONG. Should be
-  `str.replace(pattern, replacement)`.
-- `(width, height)` passed as `(height, width)`.
-- Verify by reading the function signature from the source or type defs.
-
-**3.4 Wrong comparison operators:**
-- `value || default` when `value ?? default` is needed (because `0`, `""`,
-  and `false` are falsy but may be valid values)
-- `==` vs `===` in JavaScript (especially with `null`/`undefined`/`0`/`""`)
-- `>` vs `>=` in boundary conditions
-
-**3.5 Async mistakes (always flag these):**
-- Missing `await` on async function calls whose return value is used as if
-  already resolved.
-- `await` inside `.forEach()` -- this never works as expected. The `.forEach`
-  callback returns void; `await` inside it does not pause the outer function.
-  Use `for...of` instead. **Always flag this.**
-- Race conditions in parallel operations without proper synchronization.
-- Unhandled promise rejections (floating promises).
-
-**3.6 Null/undefined errors:**
-- `if (value)` when `if (value !== undefined)` is needed (fails for `0`,
-  `""`, `false`)
-- Optional chaining misuse: `obj?.prop.nested` (the chain stops at `?` but
-  `.nested` is unconditional)
-- Early returns that skip cleanup (return before finally, connection release,
-  file handle close)
-
-Pattern ID format: `wrong-logic:<brief-description>`
-
-Example finding:
-
-```
-[HIGH] Inverted condition: access check grants access when it should deny
-  Confidence: 85/100
-  File: src/middleware/auth.ts:23
-  Pattern: wrong-logic:inverted-admin-check
-
-  The code reads:
-    if (!user.roles.includes('admin')) {
-      return NextResponse.next()  // allows request through
-    }
-  This grants access to non-admin users. The condition is inverted.
-
-  Evidence: Read the surrounding code at src/middleware/auth.ts:15-30. The
-  middleware is applied to admin routes (matcher: '/admin/:path*'). The intent
-  is to restrict access to admins, but the negation allows non-admins through.
-
-  Fix (replace lines 23-25):
-  - if (!user.roles.includes('admin')) {
-  -   return NextResponse.next()
-  - }
-  + if (user.roles.includes('admin')) {
-  +   return NextResponse.next()
-  + }
-```
-
-#### Check 4: Unsafe Type Assertions
-
-Goal: Catch type assertions that bypass the type system without runtime
-validation, hiding potential runtime errors.
-
-Procedure:
-
-1. Look for `as <Type>` assertions in TypeScript, especially:
-   - `as any` -- always suspicious; bypasses all type checking.
-   - `as unknown as <Type>` -- double assertion; indicates the types are
-     incompatible and the developer is forcing it.
-   - Assertions on API response data without validation (e.g.,
-     `const user = (await res.json()) as User` without schema validation).
-   - Assertions on `JSON.parse()` output without validation.
-2. Check if the assertion is justified:
-   - Is there a Zod/Joi/Yup schema validation immediately before?
-   - Is the data source trusted (compile-time constant, already validated)?
-   - Is this a discriminated union narrowing that TypeScript cannot infer?
-3. For generic type parameters, check:
-   - `useState<Type>()` where the initial value does not match `Type`.
-   - `useRef<Type>(null)` where `Type` should include `null`.
-   - `Promise<Type>` where the resolved value does not match `Type`.
-4. Only flag when: the assertion is on untrusted data (API responses, user
-   input, JSON parsing, database results) AND there is no runtime validation
-   nearby (within 5 lines before the assertion or in the calling function).
-
-Pattern ID format: `unsafe-type:<description>`
-
-Example finding:
-
-```
-[HIGH] Unsafe type assertion on API response without validation
-  Confidence: 82/100
-  File: src/services/user.ts:18
-  Pattern: unsafe-type:unvalidated-api-response
-
-  The code casts `(await res.json()) as User` without any runtime validation.
-  If the API returns a different shape (missing fields, different types),
-  this will cause silent data corruption or runtime errors elsewhere.
-
-  Evidence: Read src/services/user.ts:10-25. No zod schema, no validation
-  function, no type guard. The project uses zod elsewhere (found 12 instances
-  of `z.object` in src/). This file skips validation.
-
-  Fix (replace lines 17-18):
-  - const user = (await res.json()) as User
-  + const data = await res.json()
-  + const user = userSchema.parse(data)
-```
-
-#### Check 5: Deprecated API Usage
-
-Goal: Catch usage of APIs that have been deprecated or superseded in the
-installed version.
-
-Procedure:
-
-1. Determine the installed version of relevant libraries:
-   - JS/TS: Read the `version` field from
-     `node_modules/<pkg>/package.json`, or read the version range from the
-     project's `package.json`.
-   - Python: Check `pip show <pkg>` or read version from manifest.
-2. For each API call in the changed lines, check against the reference data
-   in `data/deprecated-apis.json` if loaded. Otherwise, check against these
-   known deprecations:
-   - **Node.js**: `url.parse()` (use `new URL()`), `Buffer()` constructor
-     (use `Buffer.from()`), `fs.exists()` (use `fs.access()`)
-   - **React**: `componentWillMount`, `componentWillReceiveProps`,
-     `ReactDOM.render()` (use `createRoot`), `defaultProps` on function
-     components (use default parameters), `forwardRef` (unnecessary in
-     React 19+)
-   - **Next.js**: `getServerSideProps` in app/ directory, `next/head` in
-     app/ directory, `next/image` with `layout` prop, `useRouter` from
-     `next/router` in app/ directory. Check the installed Next.js version
-     to avoid false positives (these are only deprecated in App Router).
-   - **Python**: `datetime.utcnow()` (deprecated in 3.12), `asyncio.
-     get_event_loop()` in top-level code, `logging.warn()` (use `warning()`)
-   - **Express**: `app.del()`, `req.param()`, `res.json(status, body)`
-3. Do NOT flag the following as deprecated (these are linting concerns, not
-   bugs, and should not be reported):
-   - `var` instead of `let`/`const`
-   - `any` type in TypeScript
-   - String concatenation instead of template literals
-   - Missing return type annotations
-   - Unused variables or imports
-   - Preference for one library over another
-
-Pattern ID format: `deprecated-api:<api-name>`
-
-Example finding:
-
-```
-[MEDIUM] Deprecated API: 'url.parse()' is deprecated in Node.js
-  Confidence: 72/100
-  File: src/utils/urls.ts:12
-  Pattern: deprecated-api:url.parse
-
-  The code uses `url.parse(rawUrl)` which has been deprecated since Node 11
-  due to security issues with its URL parsing. The project targets Node 20
-  (verified from .nvmrc / engines field in package.json).
-
-  Evidence: Ran `grep "engines" package.json` and found `"node": ">=20"`.
-  The `url.parse()` function has known vulnerabilities in hostname parsing.
-
-  Fix (replace lines 11-12):
-  - const { hostname, pathname } = url.parse(rawUrl)
-  + const { hostname, pathname } = new URL(rawUrl)
-```
-
-#### Check 6: Missing Error Handling
-
-Goal: Catch missing error handling that deviates from project conventions or
-that will cause certain crashes.
-
-Procedure:
-
-1. **Establish the project convention** by sampling existing code. Run:
-
-   ```
-   grep -rn "try {" src/ | wc -l
-   grep -rn "async function\|async (" src/ | wc -l
-   ```
-
-   Calculate the error-handling ratio (try-catch count / async-operation
-   count). Apply these thresholds:
-   - **>= 80%**: Convention is "always handle errors." Flag new async code
-     without error handling.
-   - **40-79%**: Convention is "selective." Only flag missing error handling
-     on I/O operations (network, filesystem, database).
-   - **< 40%**: No strong convention. Only flag the "always flag" items below.
-
-2. **Always flag these regardless of convention:**
-   - `JSON.parse()` on user input, network responses, or file contents
-     without try/catch. This will throw `SyntaxError` on malformed input.
-   - `fetch()` without checking `response.ok`. Non-2xx responses do not
-     throw; the code will silently process error pages as valid data.
-   - `fs.readFile` / `fs.writeFile` without error handling (callback or
-     try/catch with promises).
-
-3. **Flag if convention supports it:**
-   - Network calls not wrapped in try/catch or .catch()
-   - Database operations without error handling
-   - Missing timeout configuration on HTTP requests when other requests in
-     the project use timeouts
-
-4. **Do not flag:**
-   - Missing try/catch if the project uses a global error handler or wrapper
-     utility (e.g., `fetchWithRetry`, `safeQuery`). Verify by searching:
-     `grep -rn "catch\|error" <wrapper-file>`
-   - Missing null checks if the project uses TypeScript with
-     `strictNullChecks` enabled (the type system handles this).
-
-Pattern ID format: `missing-error-handling:<location>`
-
-Example finding:
-
-```
-[MEDIUM] Missing error handling: fetch() call without try/catch
-  Confidence: 78/100
-  File: src/services/user.ts:34
-  Pattern: missing-error-handling:user-ts:34
-
-  The function `getUser()` calls `fetch('/api/users/' + id)` without any
-  error handling. Every other fetch call in src/services/ uses a try/catch
-  with the project's `ApiError` class.
-
-  Evidence: Ran `grep -rn "try {" src/services/` -- found 8 try/catch blocks
-  in 8 service files. Ran `grep -rn "fetch(" src/services/` -- found 9 fetch
-  calls. The new code is the only fetch call without error handling.
-
-  Fix (wrap lines 34-35):
-  - const response = await fetch('/api/users/' + id)
-  - const data = await response.json()
-  + let response: Response
-  + try {
-  +   response = await fetch('/api/users/' + id)
-  + } catch (err) {
-  +   throw new ApiError('Failed to fetch user', { cause: err })
-  + }
-  + if (!response.ok) {
-  +   throw new ApiError(`User fetch failed: ${response.status}`)
-  + }
-  + const data = await response.json()
-```
-
-#### Check 7: Custom Rules
-
-If custom rules were loaded from `.claude/preflight/rules.md` in Step 1e,
-evaluate each rule against the changed files now. Custom rules follow the same
-confidence scoring and output format as built-in checks.
-
-Pattern ID format: `custom:<rule-name>`
-
-### 3b. Security Scanning Pass (only with --security)
-
-If the `--security` flag was provided, spawn the `security-scanner` agent
-using the Agent tool. Pass it the full diff text and the project context
-detected in Step 1c.
-
-Instruct the agent to check for:
-
-#### Security Check 1: Secrets and Credentials
-
-- API keys, tokens, passwords hardcoded in source.
-- Private keys or certificates.
-- Connection strings with embedded credentials.
-- Patterns: high-entropy strings, common key prefixes (`sk-`, `ghp_`, `AKIA`,
-  `xoxb-`, `xoxp-`, `eyJ`).
-- Environment variables with hardcoded fallback values containing real secrets.
-
-#### Security Check 2: Injection Vulnerabilities
-
-- SQL injection: raw string concatenation in queries.
-- XSS: unsanitized user input rendered in HTML/JSX (including usage of
-  React's dangerous inner HTML prop with untrusted data).
-- Command injection: user input passed to `exec`, `spawn`, `system`.
-- Path traversal: user input used in file paths without sanitization.
-- NoSQL injection: unsanitized objects passed to MongoDB queries.
-
-#### Security Check 3: Authentication and Authorization
-
-- Missing authentication checks on new API routes.
-- Authorization bypass through parameter manipulation.
-- Session handling weaknesses.
-- JWT issues (missing expiry, weak algorithms, secret in code, `alg: none`).
-- CSRF protection missing on state-changing endpoints.
-
-#### Security Check 4: Dependency Vulnerabilities
-
-- Run `npm audit --json 2>/dev/null | head -100` or `pip-audit --format=json
-  2>/dev/null | head -50` if available.
-- Flag any new dependencies with known CVEs.
-- Flag dependencies that are wildly outdated (more than 2 major versions
-  behind).
-- If the audit command is not available or fails, note it and skip. Do not
-  fail the entire run.
-
-#### Security Check 5: Data Exposure
-
-- Sensitive data logged to console or files.
-- PII in error messages sent to clients.
-- Debug endpoints left enabled.
-- Overly permissive CORS configurations (`Access-Control-Allow-Origin: *` in
-  production code).
-
-Security findings use severity levels:
-
-- **CRITICAL**: Directly exploitable (secrets in code, SQL injection)
-- **HIGH**: Exploitable with some effort (XSS, missing auth, SSRF)
-- **MEDIUM**: Defense-in-depth concern (missing headers, verbose errors)
-
-Pattern ID format: `security:<vulnerability-type>`
-
-If the security agent times out (no response after 2 minutes) or errors, report:
-
-```
-Warning: Security scan did not complete. Run /preflight --security again
-to retry, or review security manually.
-```
-
-Continue with the rest of the pipeline. Do not fail the entire run.
-
----
-
-## Step 4: Results Processing
-
-### 4a. Confidence Scoring
-
-For each raw finding, compute a confidence score from 0 to 100.
-The score is a weighted combination of three factors:
-
-| Factor | Weight | How to score it |
+| Mode | Agents dispatched | Expected duration |
 |---|---|---|
-| Evidence strength | 50% | **100**: Verified by reading the actual file, type definition, or package manifest with a tool. **60**: Inferred from the diff alone without reading the referenced files. **30**: Based on general knowledge without any project-specific verification. If your score is 30, reconsider whether to report this finding at all. |
-| Pattern specificity | 30% | **100**: The finding matches a specific, well-documented failure pattern (e.g., `Array.groupBy` hallucination, `bcrypt.compare` argument swap, `await` in `.forEach()`). **60**: The finding matches a general antipattern category (e.g., missing error handling, deprecated API usage). **30**: The finding is a judgment call about code intent or convention. |
-| Convention match | 20% | **100**: The project has a clear, verified convention (established by sampling in Step 1c or Check 6) that is violated. **50**: There is a weak or inconsistent convention. **10**: No convention was detected; this is a generic best practice. |
+| `--quick` | bug-detector only | 10-15 seconds |
+| Default (no flags) | bug-detector, test-gap-analyzer | 25-35 seconds |
+| `--security` | bug-detector, test-gap-analyzer, security-scanner | 35-50 seconds |
 
-Compute the final score:
+### 3a. Always dispatch: bug-detector
+
+Dispatch the `bug-detector` agent. Pass it:
+- The full `$DIFF` text.
+- The project context from Step 1d (language, framework, package manager, monorepo info).
+- The reference data files if loaded (phantom-packages.json, deprecated-apis.json, ai-failure-patterns.json).
+- The custom rules from rules.md if loaded.
+
+The bug-detector handles: phantom packages, hallucinated APIs, plausible-but-wrong logic, async/await mistakes, event handler errors, middleware bugs, deprecated APIs, missing error handling, and unsafe type assertions.
+
+Do NOT duplicate its detection logic here. It has its own comprehensive detection pipeline in `agents/bug-detector.md`.
+
+### 3b. Default mode: also dispatch test-gap-analyzer
+
+Unless `--quick` was specified, dispatch the `test-gap-analyzer` agent. Pass it:
+- The full `$DIFF` text.
+- The project context from Step 1d.
+
+The test-gap-analyzer handles: missing test files, untested functions, untested error paths, stale tests, outdated mocks, missing integration tests, and missing E2E tests.
+
+Do NOT duplicate its detection logic here. It has its own pipeline in `agents/test-gap-analyzer.md`.
+
+### 3c. With --security: also dispatch security-scanner
+
+If `--security` was specified, dispatch the `security-scanner` agent. Pass it:
+- The full `$DIFF` text.
+- The project context from Step 1d.
+
+The security-scanner handles: OWASP top 10, secrets in code, injection vulnerabilities, auth/authz gaps, CORS misconfigurations, dependency vulnerabilities, and framework-specific security anti-patterns.
+
+Do NOT duplicate its detection logic here. It has its own pipeline in `agents/security-scanner.md`.
+
+### 3d. Agent timeout handling
+
+If any agent does not respond within 2 minutes, print:
+```
+Warning: [agent-name] scan timed out. Results from other agents are still valid.
+```
+Continue with whatever results you have. Do NOT fail the entire run.
+
+### 3e. Collect results
+
+Each agent returns findings in this structure:
+```
+FINDING:
+  pattern_id: <ID>
+  severity: critical | high | medium
+  confidence: 0-100
+  file: <path>:<line>
+  title: <short description>
+  description: <detailed explanation>
+  evidence: <what was verified and how>
+  current_code: |
+    <buggy code>
+  fixed_code: |
+    <corrected code>
+```
+
+Collect all FINDING blocks from all agents into a single list.
+
+---
+
+## Step 4: Score, Filter, Deduplicate
+
+### 4a. Confidence scoring
+
+For each finding, compute a final confidence score:
 
 ```
 confidence = (evidence * 0.50) + (pattern * 0.30) + (convention * 0.20)
 ```
 
-Round to the nearest integer.
+| Factor | Weight | 100 = | 60 = | 30 = |
+|---|---|---|---|---|
+| Evidence | 50% | Verified by reading actual files/types/manifests | Inferred from diff context only | Based on general knowledge, unverified |
+| Pattern | 30% | Matches specific documented failure pattern | Matches general antipattern category | Judgment call about intent |
+| Convention | 20% | Project has verified convention that is violated | Weak/inconsistent convention | No convention detected |
 
-**Scoring discipline:** If your Evidence strength score is 30 (unverified),
-the maximum possible confidence is `30*0.50 + 100*0.30 + 100*0.20 = 65`.
-This means unverified findings can only appear in `--strict` or `--paranoid`
-mode, never in the default run. This is intentional.
+Round to nearest integer.
 
-### 4b. Threshold Filtering
+Key constraint: If evidence = 30 (unverified), max possible confidence = 65. Unverified findings only appear in `--strict` or `--paranoid` mode.
 
-Remove any finding whose confidence score falls below `THRESHOLD`:
+### 4b. Filter by threshold
 
-- Default run: remove findings below 60.
-- `--strict` run: remove findings below 40.
-- `--paranoid` run: remove findings below 20.
+Remove findings with confidence < `$THRESHOLD`.
 
-### 4c. Dismissed Pattern Filtering
+### 4c. Filter dismissed patterns
 
-For each remaining finding, check its `pattern_id` against the `dismissed`
-array in memory. If a match is found and the current file matches the
-dismissed entry's `file_glob`, suppress the finding silently.
+For each remaining finding, check its `pattern_id` against memory's `dismissed` array. If the pattern_id matches AND the file matches the dismissed entry's `file_glob`, suppress it silently.
 
-If a dismissed pattern matches but the file is outside the dismissed
-`file_glob`, still show the finding (the user only dismissed it for specific
-files).
+If the pattern matches but the file is outside the `file_glob`, keep it.
 
-### 4d. Deduplication
+### 4d. Deduplicate
 
-If two findings refer to the same line range and the same root cause, merge
-them into a single finding. Keep the one with the higher confidence score and
-note the duplicate in its explanation.
-
-If the same pattern appears in multiple files (e.g., the same phantom package
-imported in 5 files), report it once and list all affected locations.
+- Same line range + same root cause: merge into one finding, keep higher confidence.
+- Same pattern across multiple files (e.g., same phantom package in 5 files): report once, list all locations.
 
 ---
 
-## Step 5: Report Generation
+## Step 5: Generate Report
 
-### 5a. Report Header
+### 5a. Header
 
-Start every report with a header summarizing the scope:
-
+Print:
 ```
-Preflight scanning N changed file(s) [mode info, threshold: T]...
-[Optional: Skipped M binary file(s), K generated file(s)]
-[Optional: Warning messages from Step 1]
-
-Checking dependencies... done
-Checking API usage... done
-Checking logic patterns... done
-Checking type assertions... done
-Checking error handling... done
-Checking project conventions... done
-[If --security] Checking security... done
+Preflight scanning N file(s) [mode: default|quick|security, threshold: T]...
+[If files skipped] Skipped: M binary, K generated, J lock file(s)
+[If warnings from Step 1] Warning: <message>
 ```
 
-### 5b. Finding Format
+### 5b. Findings
 
-Present findings grouped by severity. Within each severity group, sort by
-confidence score descending. Use this exact format for each finding:
+Group by severity (CRITICAL first, then HIGH, then MEDIUM). Within each group, sort by confidence descending. Use this exact format:
 
 ```
 [SEVERITY] Short description
   Confidence: XX/100
-  File: path/to/file.ext:line_number
+  File: path/to/file.ext:line
   Pattern: pattern-id
 
-  Detailed explanation of what is wrong and why it matters.
-  Include enough context that the developer understands the issue
-  without having to look at the code.
+  Detailed explanation of what is wrong and why.
 
-  Evidence: What you actually checked (files read, commands run, grep results)
-  to confirm this finding. This is mandatory.
+  Evidence: <tool commands run and their output>
 
   Fix:
-  - old code line 1
-  - old code line 2
-  + new code line 1
-  + new code line 2
+  - old code
+  + new code
 ```
 
-The `Evidence:` section is mandatory. Every finding must state what tool
-commands were run and what the output was. A finding without evidence is not
-a finding.
+The `Evidence:` field is MANDATORY. Every finding must state what was checked.
 
-### 5c. Severity Assignment
+### 5c. Severity rules
 
-Assign severity based on impact:
+- **CRITICAL**: Runtime crash, data loss, or security breach. Examples: phantom package (ModuleNotFoundError), SQL injection, hardcoded secrets.
+- **HIGH**: Incorrect behavior, not immediately obvious. Examples: inverted conditions, swapped arguments, await in forEach.
+- **MEDIUM**: Convention deviation, should fix but not urgent. Examples: deprecated APIs, missing error handling.
 
-- **CRITICAL**: Will cause a runtime crash, data loss, or security breach.
-  Examples: phantom package import (ModuleNotFoundError), SQL injection,
-  hardcoded secrets, hallucinated API call (TypeError at runtime).
-- **HIGH**: Will cause incorrect behavior that may not be immediately obvious.
-  Examples: inverted conditions, swapped arguments, unsafe type assertions,
-  `await` in `.forEach()`.
-- **MEDIUM**: Code smell or deviation from conventions that should be fixed
-  but will not cause immediate failure. Examples: deprecated APIs, missing
-  error handling, convention violations.
-
-### 5d. Summary Line
-
-After all findings, print a summary line:
+### 5d. Summary
 
 ```
 Preflight complete: X finding(s) (Y critical, Z high, W medium)
 ```
 
-If there are zero findings:
-
+If zero findings:
 ```
 Preflight complete: 0 findings. Code looks good.
 ```
 
-### 5e. Blocking Decision
+### 5e. Blocking decision
 
-If there are CRITICAL findings, add:
+- CRITICAL findings exist: `BLOCKED -- Y critical finding(s) must be resolved before committing.`
+- Only HIGH/MEDIUM: `PASSED WITH WARNINGS -- review recommended before committing.`
+- Zero findings: `PASSED -- no issues detected.`
 
+### 5f. Actions
+
+If any findings have fixes:
 ```
-BLOCKED -- Y critical finding(s) must be resolved before committing.
-```
-
-If there are only HIGH and MEDIUM findings:
-
-```
-PASSED WITH WARNINGS -- review recommended before committing.
-```
-
-If there are zero findings:
-
-```
-PASSED -- no issues detected.
-```
-
-### 5f. Fix Offer
-
-If there are any findings with fixes, end with:
-
-```
-Run /preflight fix to apply all suggested fixes, or address them manually.
-To dismiss a false positive: /preflight dismiss <pattern-id>
+To apply all fixes: respond with "Apply all preflight fixes."
+To apply one fix: respond with "Apply fix for finding #N."
+To dismiss a false positive: /preflight-dismiss <pattern-id>
+To re-scan after changes: /preflight
 ```
 
 ---
 
 ## Step 6: Fix Application
 
-When the user runs `/preflight fix` or says "apply fixes" or "yes" after seeing
-the report, apply the fixes.
+When the user says "apply fixes", "Apply all preflight fixes", or "yes":
 
-For each finding that has a fix:
+For each finding with a fix:
+1. Read the file with the Read tool.
+2. Verify the code at the referenced lines still matches `current_code`. If not, skip and report: `Could not apply fix for [pattern-id] at file:line -- code has changed.`
+3. Apply the replacement with the Edit tool.
+4. Track applied vs skipped count.
 
-1. Read the current file content using the Read tool.
-2. Locate the exact lines referenced in the finding.
-3. Verify the code at those lines still matches the `old code` from the
-   finding. If it does not match (the code has changed since the report was
-   generated), skip this fix and report it as unapplied.
-4. Use the Edit tool to apply the replacement.
-5. Track how many fixes were applied and how many were skipped.
+After all edits, re-verify ONLY the modified files (single pass, no recursion).
 
-After all individual edits are complete, re-run the verification pipeline on
-only the modified files. Limit to a single re-verification pass to prevent
-infinite loops. If the re-verification finds new issues, report them but do
-not attempt to fix them automatically.
-
-After applying fixes, print:
-
+Print:
 ```
-Applied X/Y fixes. Z fix(es) could not be applied cleanly.
-[If re-verification found issues] Re-verification found N new issue(s):
-[list them]
-```
-
-For each unapplied fix, show the intended change so the user can apply it
-manually:
-
-```
-Could not apply fix for [pattern-id] at file.ext:line -- code has changed.
-Intended change:
-  - old line
-  + new line
+Applied X/Y fixes. Z fix(es) skipped (code changed).
+[If re-verification found issues] Re-verification found N new issue(s): [list]
 ```
 
 ---
 
-## Step 7: Dismiss Command
+## Step 7: Update Stats
 
-When the user runs `/preflight dismiss <pattern_id>`:
-
-1. Validate that `<pattern_id>` matches a known pattern format:
-   - `phantom-pkg:<name>`
-   - `hallucinated-api:<type>.<method>`
-   - `wrong-logic:<description>`
-   - `unsafe-type:<description>`
-   - `deprecated-api:<name>`
-   - `missing-error-handling:<location>`
-   - `security:<type>`
-   - `custom:<rule-name>`
-
-   If the pattern_id does not match any known format, report:
-
-   ```
-   Unknown pattern format. Valid formats: phantom-pkg:*, hallucinated-api:*,
-   wrong-logic:*, unsafe-type:*, deprecated-api:*, missing-error-handling:*,
-   security:*, custom:*
-   ```
-
-2. Prompt the user for an optional file glob scope. If not provided, default
-   to `**` (all files).
-
-3. Create or update `.claude/preflight/memory.json`:
-
-   ```
-   mkdir -p "$(git rev-parse --show-toplevel)/.claude/preflight"
-   ```
-
-   Add to the `dismissed` array:
-
-   ```json
-   {
-     "pattern_id": "<the pattern_id>",
-     "reason": "<ask user for reason or default to 'Dismissed by user'>",
-     "dismissed_at": "<current ISO 8601 timestamp>",
-     "file_glob": "<the file glob>"
-   }
-   ```
-
-   If `memory.json` already exists, read it first, append to the dismissed
-   array, and write back. Do not overwrite existing data.
-
-4. Update `stats.false_positives` by incrementing it by 1.
-
-5. Confirm:
-
-   ```
-   Dismissed pattern '<pattern_id>' for files matching '<glob>'.
-   This finding will be suppressed in future runs.
-   ```
-
----
-
-## Step 8: Stats Command
-
-When the user runs `/preflight stats`:
-
-1. Read `.claude/preflight/memory.json`.
-2. If it does not exist, report "No preflight history found." and stop.
-3. Display the following:
+After every verification run (Steps 1-5), update memory:
 
 ```
-Preflight Statistics
---------------------
-Total runs:           42
-Total findings:       108
-True positives:       87  (81%)
-False positives:      21  (19%)
-Accuracy rate:        81%
-
-Top patterns:
-  phantom-package          34 findings
-  hallucinated-api         29 findings
-  wrong-logic              18 findings
-  deprecated-api           15 findings
-  missing-error-handling   12 findings
-
-Dismissed patterns:    3 active suppressions
+mkdir -p "$ROOT/.claude/preflight"
 ```
 
-4. If accuracy is below 70%, add a note:
+Update `memory.json`:
+- Increment `stats.total_runs` by 1.
+- Add finding count to `stats.total_findings`.
+- Increment each pattern type count in `stats.patterns`.
+- `true_positives`: only increment when user applies a fix (Step 6).
+- `false_positives`: only increment when user dismisses a finding (via /preflight-dismiss).
 
+If writing fails, warn but do not fail the run:
 ```
-Note: Accuracy is below 70%. Consider reviewing dismissed patterns
-and adjusting rules in .claude/preflight/rules.md.
-```
-
-5. If there are zero runs (fresh memory), report:
-
-```
-No preflight history found. Run /preflight to start collecting statistics.
+Warning: Could not update preflight statistics. Report is still valid.
 ```
 
 ---
 
-## Step 9: Update Stats After Every Run
+## Rules (Non-Negotiable)
 
-After completing a verification run (Steps 1-5), update the stats in memory:
+1. **Never hallucinate findings.** Every finding must be backed by tool evidence. No evidence = no finding. A missed bug is better than a false positive.
 
-1. Increment `stats.total_runs` by 1.
-2. Add the number of reported findings to `stats.total_findings`.
-3. For each finding pattern type, increment its count in `stats.patterns`.
-4. Write the updated memory to `.claude/preflight/memory.json`. Create the
-   directory if it does not exist:
+2. **Never modify code during verification.** Steps 1-5 are read-only. Only Step 6 (explicit fix application) writes to files.
 
-   ```
-   mkdir -p "$(git rev-parse --show-toplevel)/.claude/preflight"
-   ```
+3. **Respect the threshold.** Do not mention, discuss, or editorialize about sub-threshold findings.
 
-5. True positives are only counted when the user applies a fix (Step 6).
-   False positives are counted when the user dismisses a finding (Step 7).
-   Do not increment either counter during the initial report -- only on user
-   action.
+4. **Never flag style issues.** Out of scope: formatting, naming, comments, documentation, indentation, line length, library preference, `any` type, unused imports. These are linting concerns.
 
-6. If writing the stats file fails (permission error, disk full), warn but
-   do not fail the run:
+5. **Precise fixes.** Every fix uses diff format (`-` old / `+` new). A developer applies it without thinking.
 
-   ```
-   Warning: Could not update preflight statistics. The report is still valid.
-   ```
+6. **Graceful degradation.** If a check fails (missing node_modules, no manifest, corrupt config), skip it and note in header. Never abort the full run.
+
+7. **Handle large diffs.** Over 500 changed lines: note in header, prioritize CRITICAL/HIGH checks, suggest file-pattern scoping.
+
+8. **Handle monorepos.** Check each workspace's own manifest, not just root.
 
 ---
 
-## Important Behavioral Rules
+## Example Run
 
-1. **Never hallucinate findings.** Every finding must be backed by evidence
-   you gathered using the tools (Read, Grep, Glob, Bash). If you cannot
-   verify a suspicion, do not report it. It is far better to miss a real
-   issue than to report a false positive. False positives destroy developer
-   trust.
+**User types:** `/preflight --strict`
 
-2. **Always show your work.** When checking for phantom packages, actually
-   read `package.json`. When checking for hallucinated APIs, actually read
-   the type definitions or source. Your evidence section must contain the
-   specific tool commands you ran and their output. Do not rely on your
-   training data alone -- it is the very thing that produces the mistakes
-   you are trying to catch.
-
-3. **Be precise in fixes.** Every fix must include the exact lines to change,
-   using diff format with `-` and `+` prefixes. A developer should be able
-   to apply the fix without thinking.
-
-4. **Respect the threshold.** Do not editorialize about findings below the
-   threshold. They are filtered out. The user chose their threshold for a
-   reason.
-
-5. **Do not modify code during verification.** The verification pass is
-   read-only. Only modify files during the explicit fix step (Step 6).
-
-6. **Keep reports scannable.** Developers will skim these reports. Put the
-   most important information first. Use the structured format exactly as
-   specified. Do not add prose between findings.
-
-7. **Handle large diffs.** If the diff is very large (more than 500 changed
-   lines across all files), do the following:
-   - Note the size in the report header: "Large diff: N changed lines across
-     M files."
-   - Prioritize CRITICAL and HIGH severity checks first.
-   - If verification is taking too long, offer to run on a file-pattern
-     subset: "Consider running `/preflight src/api/**` to focus on specific
-     files."
-
-8. **Handle monorepos.** If the project is a monorepo, check each package's
-   own dependency manifest, not just the root. Use workspace detection
-   (look for `workspaces` in `package.json`, `pnpm-workspace.yaml`, or
-   `lerna.json`).
-
-9. **Never flag style issues.** The following are explicitly out of scope
-   and must never be reported: code formatting, naming conventions, comment
-   quality, missing documentation, indentation, line length, preference for
-   one library over another, `any` type usage, unused imports/variables.
-   These are linting concerns handled by other tools.
-
-10. **Graceful degradation.** If a check cannot be performed (e.g., no
-    `node_modules` directory, no dependency manifest, corrupt config file),
-    skip that check and note it in the report header. Do not fail the entire
-    run. Always report whatever you can verify.
-
----
-
-## Example Full Run
-
-Here is an example of what a complete preflight run looks like:
-
-**User runs:** `/preflight --strict`
-
-**Output:**
+**Terminal output:**
 
 ```
-Preflight scanning 4 changed file(s) (--strict mode, threshold: 40)...
+Preflight scanning 4 file(s) [mode: default, threshold: 40]...
+Skipped: 1 lock file
 
-Checking dependencies... done
-Checking API usage... done
-Checking logic patterns... done
-Checking type assertions... done
-Checking error handling... done
-Checking project conventions... done
+Dispatching agents...
+  bug-detector .......... done (12.3s)
+  test-gap-analyzer ..... done (9.8s)
+
+──────────────────────────────────────────
 
 [CRITICAL] Phantom package: 'zod-form-data' is not installed
   Confidence: 95/100
@@ -1208,22 +446,20 @@ Checking project conventions... done
   not listed in package.json. This will crash at runtime with
   MODULE_NOT_FOUND.
 
-  The package 'zod-form-data' is a real npm package but it is not
-  installed in this project.
-
   Evidence: Ran `grep "zod-form-data" package.json` -- no match.
-  Ran `grep "zod" package.json` -- found `"zod": "^3.22.4"` in
-  dependencies. Only 'zod' is installed, not 'zod-form-data'.
+  Ran `grep "zod" package.json` -- found `"zod": "^3.22.4"`.
+  Ran `ls node_modules/zod-form-data 2>/dev/null` -- not found.
 
-  Fix: Install the missing package:
+  Fix (install the package):
     npm install zod-form-data
 
-  Or replace with plain zod validation:
+  Or replace with plain zod:
   - import { zfd } from 'zod-form-data'
   - const schema = zfd.formData({ file: zfd.file() })
   + import { z } from 'zod'
   + const schema = z.object({ file: z.instanceof(File) })
 
+──────────────────────────────────────────
 
 [HIGH] Swapped arguments in coordinate transform
   Confidence: 82/100
@@ -1231,116 +467,76 @@ Checking project conventions... done
   Pattern: wrong-logic:swapped-args-lat-lng
 
   The function `transformPoint(lat, lng)` is called as
-  `transformPoint(point.lng, point.lat)` -- the arguments are swapped.
+  `transformPoint(point.lng, point.lat)` -- arguments are swapped.
 
-  Evidence: Read the function definition at src/utils/geo.ts:1-5 which
-  declares `function transformPoint(latitude: number, longitude: number)`.
-  The call at line 15 passes `point.lng` as the first argument (latitude
-  position) and `point.lat` as the second (longitude position).
+  Evidence: Read function definition at src/utils/geo.ts:1-5:
+  `function transformPoint(latitude: number, longitude: number)`.
+  Call at line 15 passes lng first, lat second.
 
-  Fix (replace line 15):
+  Fix:
   - const result = transformPoint(point.lng, point.lat)
   + const result = transformPoint(point.lat, point.lng)
 
+──────────────────────────────────────────
 
 [MEDIUM] Deprecated API: 'new Buffer()' constructor
   Confidence: 72/100
   File: src/utils/encoding.ts:8
   Pattern: deprecated-api:Buffer-constructor
 
-  The code uses `new Buffer(str, 'base64')` which has been deprecated
-  since Node 6 due to security concerns. The project targets Node 20.
+  `new Buffer(str, 'base64')` deprecated since Node 6. Project targets
+  Node 20 (from package.json engines field).
 
-  Evidence: Ran `grep "engines" package.json` and found
-  `"node": ">=20.0.0"`. The `new Buffer()` constructor has been
-  deprecated since Node 6 and emits a runtime warning.
+  Evidence: Ran `grep "engines" package.json` -- found `"node": ">=20.0.0"`.
 
-  Fix (replace line 8):
+  Fix:
   - const buf = new Buffer(str, 'base64')
   + const buf = Buffer.from(str, 'base64')
 
+──────────────────────────────────────────
 
-Preflight complete: 3 finding(s) (1 critical, 1 high, 1 medium)
+[MEDIUM] No test file for new module
+  Confidence: 88/100
+  File: src/api/upload.ts
+  Pattern: test-gap:NO_TEST_FILE
+
+  src/api/upload.ts is a new file with 3 exported functions but no
+  corresponding test file. Project convention: co-located tests
+  (e.g., src/api/users.test.ts exists).
+
+  Evidence: Ran `ls src/api/upload.test.ts 2>/dev/null` -- not found.
+  Ran `ls src/api/__tests__/upload.test.ts 2>/dev/null` -- not found.
+  Confirmed convention from 6 existing test files in src/api/.
+
+──────────────────────────────────────────
+
+Preflight complete: 4 finding(s) (1 critical, 1 high, 2 medium)
 
 BLOCKED -- 1 critical finding(s) must be resolved before committing.
 
-Run /preflight fix to apply all suggested fixes, or address them manually.
-To dismiss a false positive: /preflight dismiss <pattern-id>
+To apply all fixes: respond with "Apply all preflight fixes."
+To apply one fix: respond with "Apply fix for finding #N."
+To dismiss a false positive: /preflight-dismiss <pattern-id>
+To re-scan after changes: /preflight
 ```
-
----
-
-## Language-Specific Guidance
-
-### JavaScript / TypeScript
-
-- Read `package.json` for dependencies, `tsconfig.json` for compiler settings.
-- Check `node_modules/<pkg>/package.json` for the installed version.
-- For type checking, read `.d.ts` files in `node_modules/<pkg>` or
-  `node_modules/@types/<pkg>`.
-- Common AI hallucinations: `Array.groupBy` (correct: `Object.groupBy`),
-  `Object.hasOwn` (exists but often confused with `hasOwnProperty`),
-  `structuredClone` (exists in Node 17+ but AI may use it for older targets),
-  `fetch` in Node (exists in 18+ only), `Headers.getAll()` (never existed),
-  `fs.promises.exists()` (never existed).
-- Path alias handling: Read `tsconfig.json` `compilerOptions.paths` to avoid
-  flagging aliased imports like `@/utils/foo` as phantom packages.
-
-### Python
-
-- Read `requirements.txt`, `pyproject.toml`, or `Pipfile` for dependencies.
-- **Critical**: Import names often differ from pip package names. Always
-  check the mapping (see Check 1 procedure for the full list).
-- Common AI hallucinations: `match` statement (3.10+), `str.removeprefix`
-  (3.9+), `asyncio.TaskGroup` (3.11+), nonexistent methods on `pandas`
-  DataFrames, wrong `sklearn` import paths, `datetime.utcnow()` (deprecated
-  in 3.12).
-
-### Go
-
-- Read `go.mod` for dependencies and Go version.
-- Common AI hallucinations: methods on wrong receiver types, nonexistent
-  standard library functions, pre-generics patterns on post-1.18 codebases,
-  `ioutil` package (deprecated since Go 1.16, moved to `io` and `os`).
-
-### Rust
-
-- Read `Cargo.toml` for dependencies and edition.
-- Common AI hallucinations: unstable features used without feature gates,
-  wrong trait method signatures, deprecated `try!` macro (use `?` operator),
-  `#[async_trait]` when not needed in Rust 1.75+.
 
 ---
 
 ## Edge Cases
 
-- **Empty diff**: Report "Nothing to verify" and exit. Do not invent findings.
-- **Binary files in diff**: Skip them entirely. Note how many were skipped in
-  the report header.
-- **Rename-only changes**: Verify the new import paths are correct but do
-  not run the full check suite.
-- **Lock file only changes**: Skip. These are auto-generated.
-- **Generated files**: Skip files with `// @generated` or `# Generated by`
-  headers. Note how many were skipped.
-- **Very large diffs (500+ lines)**: Warn the user that full verification
-  may take a while. Prioritize CRITICAL checks. Offer to run on a
-  file-pattern subset.
-- **No dependency manifest found**: Warn that phantom package detection
-  is limited. Still check against known hallucinated package names from
-  reference data.
-- **No node_modules directory**: Warn that API verification is limited
-  (cannot read type definitions). Reduce confidence for hallucinated API
-  findings by 15 points.
-- **Merge commits**: Use `git diff --cached` which only shows the staged
-  result, not the full merge history.
-- **Detached HEAD**: This is fine. `git diff --cached` and `git diff` still
-  work. Proceed normally.
-- **Config-only changes**: Changes to `.env.example`, YAML configs, JSON
-  configs, etc. Skip code verification checks. If `--security` is enabled,
-  still check for secrets in these files.
-- **Monorepo with changed files in multiple workspaces**: Run phantom package
-  checks against each workspace's own manifest, not just the root.
-- **Corrupt memory.json**: Warn and start fresh. Do not fail.
-- **Partial check failure**: If one check errors out (e.g., cannot read a
-  file), continue with remaining checks. Note the skipped check in the
-  report header.
+| Situation | Action |
+|---|---|
+| Empty diff | Print "Nothing to verify." STOP. |
+| Binary files in diff | Skip. Note count in header. |
+| Rename-only changes | Verify import paths updated. Skip full checks. |
+| Lock-file-only changes | Skip entirely. |
+| Generated files | Skip. Note count in header. |
+| 500+ changed lines | Warn in header. Prioritize CRITICAL. Suggest file-pattern scoping. |
+| No dependency manifest | Warn: "Phantom package detection limited." Still check known hallucinated names. |
+| No node_modules | Warn: "API verification limited." Reduce hallucinated-API confidence by 15. |
+| Merge commits | `git diff --cached` shows staged result only. Proceed normally. |
+| Detached HEAD | `git diff` still works. Proceed normally. |
+| Config-only changes | Skip code checks. If `--security`, still check for secrets. |
+| Monorepo, multiple workspaces changed | Check each workspace's own manifest separately. |
+| Corrupt memory.json | Warn and use empty memory. Do not abort. |
+| Single check fails | Skip that check, note in header, continue remaining checks. |

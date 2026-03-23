@@ -212,7 +212,9 @@ MERGE_BASE=""
 IS_MERGE=0
 
 # If HEAD is a merge commit (has more than one parent), diff against merge base.
-PARENT_COUNT="$(git cat-file -p HEAD 2>/dev/null | grep -c '^parent ' || echo '0')"
+PARENT_COUNT="$(git cat-file -p HEAD 2>/dev/null | grep -c '^parent ' || true)"
+PARENT_COUNT="$(printf '%s' "$PARENT_COUNT" | tr -d '[:space:]')"
+PARENT_COUNT="${PARENT_COUNT:-0}"
 if [ "$PARENT_COUNT" -gt 1 ]; then
     IS_MERGE=1
     # Use the first parent as the merge base reference.

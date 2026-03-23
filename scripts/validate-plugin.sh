@@ -446,32 +446,40 @@ if echo "$SKILL_CONTENT" | grep -qo 'test-gap-analyzer'; then
     REFERENCED_AGENTS+=("test-gap-analyzer")
 fi
 
-for ref_agent in "${REFERENCED_AGENTS[@]}"; do
-    found=0
-    for existing in "${AGENT_BASENAMES[@]}"; do
-        if [ "$ref_agent" = "$existing" ]; then
-            found=1
-            break
+if [ "${#REFERENCED_AGENTS[@]}" -gt 0 ]; then
+    for ref_agent in "${REFERENCED_AGENTS[@]}"; do
+        found=0
+        if [ "${#AGENT_BASENAMES[@]}" -gt 0 ]; then
+            for existing in "${AGENT_BASENAMES[@]}"; do
+                if [ "$ref_agent" = "$existing" ]; then
+                    found=1
+                    break
+                fi
+            done
+        fi
+        if [ "$found" -eq 1 ]; then
+            pass "SKILL.md references agent '$ref_agent' which exists"
+        else
+            fail "SKILL.md references agent '$ref_agent' which does NOT exist"
         fi
     done
-    if [ "$found" -eq 1 ]; then
-        pass "SKILL.md references agent '$ref_agent' which exists"
-    else
-        fail "SKILL.md references agent '$ref_agent' which does NOT exist"
-    fi
-done
+else
+    warn "No agent references found in SKILL.md"
+fi
 
 # Check that CLAUDE.md mentions all agent files
 CLAUDE_MD="$PLUGIN_ROOT/CLAUDE.md"
 if [ -f "$CLAUDE_MD" ]; then
     CLAUDE_CONTENT="$(cat "$CLAUDE_MD")"
-    for agent_basename in "${AGENT_BASENAMES[@]}"; do
-        if echo "$CLAUDE_CONTENT" | grep -q "$agent_basename"; then
-            pass "CLAUDE.md references agent '$agent_basename'"
-        else
-            warn "CLAUDE.md does not mention agent '$agent_basename'"
-        fi
-    done
+    if [ "${#AGENT_BASENAMES[@]}" -gt 0 ]; then
+        for agent_basename in "${AGENT_BASENAMES[@]}"; do
+            if echo "$CLAUDE_CONTENT" | grep -q "$agent_basename"; then
+                pass "CLAUDE.md references agent '$agent_basename'"
+            else
+                warn "CLAUDE.md does not mention agent '$agent_basename'"
+            fi
+        done
+    fi
 fi
 
 # Check that data files referenced in agents are present
@@ -483,12 +491,14 @@ done
 
 for data_name in "ai-failure-patterns.json" "deprecated-apis.json" "phantom-packages.json"; do
     found=0
-    for existing in "${DATA_FILES[@]}"; do
-        if [ "$data_name" = "$existing" ]; then
-            found=1
-            break
-        fi
-    done
+    if [ "${#DATA_FILES[@]}" -gt 0 ]; then
+        for existing in "${DATA_FILES[@]}"; do
+            if [ "$data_name" = "$existing" ]; then
+                found=1
+                break
+            fi
+        done
+    fi
     if [ "$found" -eq 1 ]; then
         pass "Data file '$data_name' exists"
     else
