@@ -568,12 +568,6 @@
       "notes": "Versioned variant does not exist as a separate package"
     },
     {
-      "hallucinated": "django-rest-framework",
-      "correct": "djangorestframework",
-      "type": "typo_variant",
-      "notes": "Common hyphenation error; the pip package has no hyphens between words"
-    },
-    {
       "hallucinated": "python-dotenv-v2",
       "correct": "python-dotenv",
       "type": "version_suffix",
@@ -584,12 +578,6 @@
       "correct": "pandas",
       "type": "pure_fabrication",
       "notes": "No tools sub-package; functionality is in pandas itself"
-    },
-    {
-      "hallucinated": "sklearn",
-      "correct": "scikit-learn",
-      "type": "import_confusion",
-      "notes": "The import is 'sklearn' but the pip package is 'scikit-learn'. A deprecated placeholder exists on PyPI that blocks install since Dec 2023."
     },
     {
       "hallucinated": "cv2",
@@ -608,12 +596,6 @@
       "correct": "PyYAML",
       "type": "import_confusion",
       "notes": "The import is yaml but the pip package is PyYAML"
-    },
-    {
-      "hallucinated": "dotenv",
-      "correct": "python-dotenv",
-      "type": "import_confusion",
-      "notes": "The import is dotenv but the pip package is python-dotenv"
     },
     {
       "hallucinated": "flask-v3",
@@ -646,34 +628,10 @@
       "notes": "v2 is published under the same tensorflow package"
     },
     {
-      "hallucinated": "pytorch",
-      "correct": "torch",
-      "type": "import_confusion",
-      "notes": "The pip package is 'torch', not 'pytorch'; install via 'pip install torch'"
-    },
-    {
-      "hallucinated": "beautifulsoup",
-      "correct": "beautifulsoup4",
-      "type": "typo_variant",
-      "notes": "The current package is beautifulsoup4; 'beautifulsoup' is the abandoned v3"
-    },
-    {
-      "hallucinated": "bs4",
-      "correct": "beautifulsoup4",
-      "type": "import_confusion",
-      "notes": "The import is bs4 but the pip package is beautifulsoup4. A dummy 'bs4' package exists on PyPI that depends on beautifulsoup4 as a redirect."
-    },
-    {
       "hallucinated": "dateutil",
       "correct": "python-dateutil",
       "type": "import_confusion",
       "notes": "The import is dateutil but the pip package is python-dateutil"
-    },
-    {
-      "hallucinated": "jwt",
-      "correct": "PyJWT",
-      "type": "import_confusion",
-      "notes": "The import is jwt but the pip package is PyJWT"
     },
     {
       "hallucinated": "openai-python",
@@ -748,58 +706,16 @@
       "notes": "Plausible-sounding fabrication. Use pandas for DataFrame operations. Documented by Snyk."
     },
     {
-      "hallucinated": "fastjson",
-      "correct": null,
-      "type": "cross_ecosystem",
-      "notes": "fastjson is a Java library (com.alibaba.fastjson). Does not exist for Python. Use json (stdlib) or orjson/ujson."
-    },
-    {
-      "hallucinated": "serial",
-      "correct": "pyserial",
-      "type": "import_confusion",
-      "notes": "The import is 'serial' but the pip package is 'pyserial'"
-    },
-    {
       "hallucinated": "usb",
       "correct": "pyusb",
       "type": "import_confusion",
       "notes": "The import is 'usb' but the pip package is 'pyusb'"
     },
     {
-      "hallucinated": "skimage",
-      "correct": "scikit-image",
-      "type": "import_confusion",
-      "notes": "The import is 'skimage' but the pip package is 'scikit-image'"
-    },
-    {
-      "hallucinated": "multipart",
-      "correct": "python-multipart",
-      "type": "import_confusion",
-      "notes": "The import is 'multipart' but the pip package is 'python-multipart'. Required by FastAPI for form data."
-    },
-    {
-      "hallucinated": "Crypto",
-      "correct": "pycryptodome",
-      "type": "import_confusion",
-      "notes": "The import is 'Crypto' (or 'Cryptodome') but the pip package is 'pycryptodome' (or 'pycryptodomex')"
-    },
-    {
       "hallucinated": "OpenSSL",
       "correct": "pyOpenSSL",
       "type": "import_confusion",
       "notes": "The import is 'OpenSSL' but the pip package is 'pyOpenSSL'"
-    },
-    {
-      "hallucinated": "google.auth",
-      "correct": "google-auth",
-      "type": "import_confusion",
-      "notes": "The import is 'google.auth' but the pip package is 'google-auth'"
-    },
-    {
-      "hallucinated": "ffmpeg",
-      "correct": "python-ffmpeg",
-      "type": "import_confusion",
-      "notes": "The import is 'ffmpeg' but the pip package is 'python-ffmpeg' (or 'ffmpeg-python' depending on the library)"
     },
     {
       "hallucinated": "graphit-orm",
@@ -861,6 +777,90 @@
       "package": "numpy-utils",
       "status": "exists_but_unmaintained",
       "notes": "VALIDATED: numpy-utils exists on PyPI (v0.1.6, last updated 2019). It is a third-party package, NOT part of numpy. Unmaintained for 6+ years."
+    },
+    {
+      "package": "django-rest-framework",
+      "correct_modern": "djangorestframework",
+      "status": "exists_but_stub",
+      "notes": "VALIDATED: django-rest-framework exists on PyPI (v0.1.0) as a stub/placeholder. The correct package is 'djangorestframework' (no hyphens between words). LLMs commonly suggest the hyphenated form."
+    },
+    {
+      "package": "sklearn",
+      "correct_modern": "scikit-learn",
+      "status": "deprecated_placeholder",
+      "notes": "VALIDATED: sklearn exists on PyPI (v0.0.post12) as a deprecated placeholder that redirects to scikit-learn. 'pip install sklearn' prints a deprecation warning since Dec 2023. Use 'pip install scikit-learn'."
+    },
+    {
+      "package": "dotenv",
+      "correct_modern": "python-dotenv",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: dotenv exists on PyPI (v0.9.9) but it is a DIFFERENT package from python-dotenv. The import name 'dotenv' maps to python-dotenv. LLMs confuse the two."
+    },
+    {
+      "package": "pytorch",
+      "correct_modern": "torch",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: pytorch exists on PyPI (v1.0.2) but it is NOT the official PyTorch package. The correct install is 'pip install torch'. The 'pytorch' package on PyPI is an imposter/placeholder."
+    },
+    {
+      "package": "beautifulsoup",
+      "correct_modern": "beautifulsoup4",
+      "status": "exists_but_abandoned",
+      "notes": "VALIDATED: beautifulsoup exists on PyPI (v3.2.2) but is the abandoned v3 series. The current maintained package is 'beautifulsoup4'."
+    },
+    {
+      "package": "bs4",
+      "correct_modern": "beautifulsoup4",
+      "status": "exists_as_redirect",
+      "notes": "VALIDATED: bs4 exists on PyPI (v0.0.2) as a dummy redirect package that depends on beautifulsoup4. 'pip install bs4' works but the canonical install is 'pip install beautifulsoup4'."
+    },
+    {
+      "package": "jwt",
+      "correct_modern": "PyJWT",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: jwt exists on PyPI (v1.4.0) but it is a DIFFERENT package from PyJWT. The import 'import jwt' comes from PyJWT. Installing 'jwt' gives you a different, less popular library."
+    },
+    {
+      "package": "fastjson",
+      "correct_modern": null,
+      "status": "exists_different_from_expected",
+      "notes": "VALIDATED: fastjson exists on PyPI (v1.1.0) as a Python package. Previously listed as cross-ecosystem (Java only) but a Python package does exist. Use json (stdlib) or orjson/ujson for performance."
+    },
+    {
+      "package": "serial",
+      "correct_modern": "pyserial",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: serial exists on PyPI (v0.0.97) but it is a DIFFERENT package from pyserial. The import 'import serial' comes from pyserial. Installing 'serial' gives you a different serialization library."
+    },
+    {
+      "package": "skimage",
+      "correct_modern": "scikit-image",
+      "status": "exists_as_redirect",
+      "notes": "VALIDATED: skimage exists on PyPI (v0.0) as a placeholder/redirect. The correct install is 'pip install scikit-image'."
+    },
+    {
+      "package": "multipart",
+      "correct_modern": "python-multipart",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: multipart exists on PyPI (v1.3.1) as a real, different package from python-multipart. FastAPI requires python-multipart for form data, not multipart."
+    },
+    {
+      "package": "Crypto",
+      "correct_modern": "pycryptodome",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: Crypto exists on PyPI (v1.4.1) but it is a DIFFERENT package from pycryptodome. The import 'from Crypto.Cipher import AES' comes from pycryptodome. Installing 'Crypto' gives you a different library."
+    },
+    {
+      "package": "google.auth",
+      "correct_modern": "google-auth",
+      "status": "exists_normalized_name",
+      "notes": "VALIDATED: google.auth resolves on PyPI (v2.49.1) because pip normalizes 'google-auth' to 'google.auth'. 'pip install google.auth' and 'pip install google-auth' install the same package. Not a phantom."
+    },
+    {
+      "package": "ffmpeg",
+      "correct_modern": "ffmpeg-python",
+      "status": "exists_different_package",
+      "notes": "VALIDATED: ffmpeg exists on PyPI (v1.4) as a real package (ffmpeg-python wrapper). There are multiple ffmpeg wrapper packages: 'ffmpeg' (v1.4), 'ffmpeg-python', and 'python-ffmpeg'. LLMs may suggest the wrong one."
     }
   ],
   "detection_patterns": {
