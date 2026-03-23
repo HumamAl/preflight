@@ -1,9 +1,10 @@
 {
   "$schema": "https://preflight.dev/schemas/false-positive-mitigations-v1.json",
-  "version": "1.0.0",
-  "generated": "2026-03-22",
+  "version": "1.1.0",
+  "generated": "2026-03-23",
   "description": "Comprehensive catalog of false positive scenarios for each preflight detection category, with concrete mitigation strategies and detection commands. Every mitigation should be checked BEFORE reporting a finding to reduce false positives.",
   "mitigations": [
+
     {
       "pattern_id": "PHANTOM_PACKAGE",
       "false_positive_scenario": "Package is provided by a monorepo workspace dependency (hoisted or symlinked from a sibling package)",
@@ -59,6 +60,14 @@
       "detection_command": "grep -A 20 '\"peerDependencies\"' package.json | grep '<package>'"
     },
     {
+      "pattern_id": "PHANTOM_PACKAGE",
+      "false_positive_scenario": "Package is listed in optionalDependencies and may not be installed on all platforms (e.g., fsevents on Linux, better-sqlite3 on some CI)",
+      "mitigation": "Check optionalDependencies in package.json. If the package is listed there, it may legitimately be absent on certain platforms. The code should handle the missing module gracefully (try/require with catch), but the import itself is not phantom.",
+      "detection_command": "grep -A 10 '\"optionalDependencies\"' package.json | grep '<package>'"
+    },
+
+
+    {
       "pattern_id": "HALLUCINATED_API",
       "false_positive_scenario": "Method exists but only in a newer version of the library than what preflight's knowledge covers",
       "mitigation": "Always check the INSTALLED version's type definitions in node_modules rather than relying on static knowledge. Read node_modules/<pkg>/package.json for the version, then grep the actual .d.ts files for the method.",
@@ -100,6 +109,14 @@
       "mitigation": "If the method call is on a dynamic/generic type (Record, any, unknown), or accessed via bracket notation obj[methodName](), lower confidence significantly. Dynamic dispatch is intentional and cannot be statically verified.",
       "detection_command": "grep -n '\\[.*\\](' <file> | head -5"
     },
+    {
+      "pattern_id": "HALLUCINATED_API",
+      "false_positive_scenario": "Method exists at runtime but not in the type definitions (common with dynamically-typed libraries or when @types is outdated)",
+      "mitigation": "If type definitions do not list the method but the installed package's JavaScript source does, the types are incomplete rather than the API being hallucinated. Check the actual .js source files in node_modules, not just .d.ts files. If found in source, lower severity and suggest a type declaration fix rather than code removal.",
+      "detection_command": "grep -r '<method>' node_modules/<package>/dist/*.js node_modules/<package>/lib/*.js 2>/dev/null"
+    },
+
+
     {
       "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
       "false_positive_scenario": "Inverted condition is intentional deny-by-default pattern (e.g., if (!isAdmin) return 403 -- the block DENIES access to non-admins)",
@@ -143,6 +160,38 @@
       "detection_command": "grep -n 'Promise.all\\|Promise.allSettled\\|Promise.race' <file>"
     },
     {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "value || default flagged as incorrect nullish coalescing, but the code intentionally treats 0 and empty string as falsy (e.g., filtering out empty/zero inputs)",
+      "mitigation": "Check the semantic context. If the variable represents user input where 0 and '' are invalid/empty values that should fall back to default, then || is correct. Only flag || vs ?? when the variable can legitimately be 0 or '' as a valid value (e.g., numeric quantity, optional label).",
+      "detection_command": "Check the variable's type and whether 0/'' are valid values in the business domain"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Comparison flagged as wrong operator but the code uses a custom comparator or overloaded operator (e.g., dayjs().isBefore() instead of < operator)",
+      "mitigation": "Check whether the comparison involves wrapper types (dayjs, moment, BigNumber, Decimal) that provide their own comparison methods. Raw operator comparisons on wrapper types may be intentionally wrong or intentionally correct depending on the type's valueOf() implementation. Only flag with high confidence when the types are primitives.",
+      "detection_command": "Check the type of the operands being compared"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "parseInt without radix flagged but the input is guaranteed to be a decimal number (e.g., from a validated form field or numeric database column)",
+      "mitigation": "parseInt without a radix argument defaults to base 10 in modern JavaScript engines (ES5+) for decimal strings. The radix is only ambiguous for strings starting with '0' (octal in legacy engines) or '0x' (hexadecimal). If the input is from a validated numeric source (form with type=number, database integer column, validated schema), the missing radix is not a bug. Still recommend adding radix 10 as a best practice, but lower severity to informational.",
+      "detection_command": "Check the input source: is it from a validated numeric field, or from raw user string input"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Floating point comparison flagged as imprecise but the values are integers stored as floats (e.g., pixel counts, array indices, counters that never have decimal parts)",
+      "mitigation": "Floating point equality comparison (===) is unsafe for values with decimal parts due to precision errors (0.1 + 0.2 !== 0.3). However, integers up to Number.MAX_SAFE_INTEGER are exactly representable as IEEE 754 doubles. If the compared values are always whole numbers (counters, indices, pixel dimensions, integer math results), floating point comparison is exact and safe. Check whether the values can have fractional parts.",
+      "detection_command": "Check whether the compared values are derived from integer arithmetic, array lengths, counters, or could have decimal components"
+    },
+    {
+      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
+      "false_positive_scenario": "Ternary or short-circuit evaluation flagged as wrong logic but is a deliberate compact idiom (e.g., array.length && array[0] to get first element or undefined)",
+      "mitigation": "Short-circuit patterns like 'arr.length && arr[0]', 'obj && obj.prop', and 'flag ? valueA : valueB' are intentional compact expressions. They may look like logic errors (returning 0 from arr.length && ...) but are often deliberate. Check whether the falsy short-circuit value (0, '', false) would cause incorrect behavior in the consuming code. If the result is only checked for truthiness, the pattern is fine.",
+      "detection_command": "Check how the result of the short-circuit expression is used: boolean context (if/ternary) vs value context (assignment, return)"
+    },
+
+
+    {
       "pattern_id": "DEPRECATED_API",
       "false_positive_scenario": "Project intentionally targets an older runtime version where the API is not yet deprecated (e.g., Node 14 where url.parse is standard)",
       "mitigation": "Check the project's target runtime version from engines in package.json, .nvmrc, Dockerfile, or tsconfig target. If the deprecated-since version is newer than the project's target, suppress the finding.",
@@ -157,7 +206,7 @@
     {
       "pattern_id": "DEPRECATED_API",
       "false_positive_scenario": "The replacement API has a different behavior or is not a drop-in substitute, and the old API is used for its specific semantics",
-      "mitigation": "Before flagging, verify that the replacement API is actually a safe substitute. For example, new URL() throws on invalid URLs while url.parse() returns null -- they have different error semantics. If the code relies on the specific behavior of the old API (like non-throwing), note this in the finding and lower confidence.",
+      "mitigation": "Before flagging, verify that the replacement API is actually a safe substitute. For example, URL constructor throws on invalid URLs while url.parse() returns null -- they have different error semantics. If the code relies on the specific behavior of the old API (like non-throwing), note this in the finding and lower confidence.",
       "detection_command": "Check if the code's error handling relies on the old API's specific behavior (e.g., try/catch vs null check)"
     },
     {
@@ -178,6 +227,8 @@
       "mitigation": "Distinguish between official deprecations (marked @deprecated in source, documented in changelogs) and community preferences. Only flag official deprecations at MEDIUM severity. Community preferences should only be flagged if a custom rule in .claude/preflight/rules.md explicitly requests it.",
       "detection_command": "Check if the deprecation entry has since_version: null, which indicates a convention rather than an official deprecation"
     },
+
+
     {
       "pattern_id": "MISSING_ERROR_HANDLING",
       "false_positive_scenario": "Errors are handled by a parent caller or higher-order function that wraps the call in try/catch",
@@ -209,6 +260,14 @@
       "detection_command": "grep -E '\"strict\".*true|\"strictNullChecks\".*true' tsconfig.json 2>/dev/null"
     },
     {
+      "pattern_id": "MISSING_ERROR_HANDLING",
+      "false_positive_scenario": "The async operation uses a Result/Either type pattern instead of try/catch (common in functional programming approaches using neverthrow, fp-ts, or Effect)",
+      "mitigation": "Check if the project uses Result/Either/Effect patterns by searching for imports from neverthrow, fp-ts, effect, or custom Result types. If the return type is Result<T, E> or Either<L, R>, errors are encoded in the return value and do not require try/catch.",
+      "detection_command": "grep -rn 'neverthrow\\|fp-ts\\|@effect\\|Result<\\|Either<\\|ok(\\|err(' src/ 2>/dev/null"
+    },
+
+
+    {
       "pattern_id": "SECURITY",
       "false_positive_scenario": "Hardcoded string that looks like a secret is actually a test/example/placeholder value (e.g., sk-test-xxxx, AKIA0000000000000000)",
       "mitigation": "Check if the file is in a test directory, contains 'example', 'mock', 'fixture', 'placeholder', 'dummy', or 'test' in the filename or nearby comments. Also check if the value matches known test/example patterns: 'sk-test-', 'pk_test_', 'AKIA0000', 'password123', 'changeme', 'your-api-key-here'.",
@@ -239,34 +298,304 @@
       "detection_command": "Check if the CORS config coexists with authentication middleware or sensitive data routes"
     },
     {
-      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
-      "false_positive_scenario": "value || default flagged as incorrect nullish coalescing, but the code intentionally treats 0 and empty string as falsy (e.g., filtering out empty/zero inputs)",
-      "mitigation": "Check the semantic context. If the variable represents user input where 0 and '' are invalid/empty values that should fall back to default, then || is correct. Only flag || vs ?? when the variable can legitimately be 0 or '' as a valid value (e.g., numeric quantity, optional label).",
-      "detection_command": "Check the variable's type and whether 0/'' are valid values in the business domain"
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Rate limiting is handled at infrastructure level (nginx, Cloudflare, API Gateway, load balancer) rather than in application code",
+      "mitigation": "Check for infrastructure-level rate limiting indicators: nginx.conf with limit_req_zone, Cloudflare or AWS WAF configuration files, API Gateway throttling settings, Kubernetes Ingress annotations (nginx.ingress.kubernetes.io/limit-rps), or docker-compose/infrastructure files referencing rate limit services. Also check for comments or documentation referencing external rate limiting. If infrastructure-level rate limiting is configured, suppress application-level rate limiting findings.",
+      "detection_command": "grep -rn 'limit_req\\|rate.limit\\|throttle\\|RateLimit' nginx.conf* docker-compose* infrastructure/ deploy/ k8s/ 2>/dev/null; grep -rn 'cloudflare\\|WAF\\|api.gateway' README* docs/ 2>/dev/null"
     },
     {
-      "pattern_id": "HALLUCINATED_API",
-      "false_positive_scenario": "Method exists at runtime but not in the type definitions (common with dynamically-typed libraries or when @types is outdated)",
-      "mitigation": "If type definitions do not list the method but the installed package's JavaScript source does, the types are incomplete rather than the API being hallucinated. Check the actual .js source files in node_modules, not just .d.ts files. If found in source, lower severity and suggest a type declaration fix rather than code removal.",
-      "detection_command": "grep -r '<method>' node_modules/<package>/dist/*.js node_modules/<package>/lib/*.js 2>/dev/null"
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Authentication is handled by middleware that is not visible in the diff (e.g., auth middleware applied at router level, API gateway auth, or framework-level auth)",
+      "mitigation": "Before flagging a missing auth check on a route handler, search for middleware applied at the router, app, or framework level. Check for auth middleware in Express app.use(), Next.js middleware.ts, Django middleware settings, FastAPI dependency injection at the router level, or API gateway configuration. A route that appears unprotected may inherit auth from a parent middleware.",
+      "detection_command": "grep -rn 'app.use.*auth\\|middleware.*auth\\|requireAuth\\|protect\\|isAuthenticated\\|Depends.*auth' src/ middleware.* 2>/dev/null; cat middleware.ts middleware.js 2>/dev/null"
     },
     {
-      "pattern_id": "PHANTOM_PACKAGE",
-      "false_positive_scenario": "Package is listed in optionalDependencies and may not be installed on all platforms (e.g., fsevents on Linux, better-sqlite3 on some CI)",
-      "mitigation": "Check optionalDependencies in package.json. If the package is listed there, it may legitimately be absent on certain platforms. The code should handle the missing module gracefully (try/require with catch), but the import itself is not phantom.",
-      "detection_command": "grep -A 10 '\"optionalDependencies\"' package.json | grep '<package>'"
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "CORS wildcard (*) is used on a genuinely public API that serves no authenticated content and exposes no sensitive data",
+      "mitigation": "Determine whether the API is public-facing with no auth requirements. Check if the API handles only public data (open datasets, public content, static resources, health checks, documentation). If no route in the application requires authentication and no sensitive data is served, CORS * is correct. Only flag when * coexists with routes that use cookies, bearer tokens, or session-based auth.",
+      "detection_command": "grep -rn 'Authorization\\|Bearer\\|cookie\\|session\\|jwt\\|token' src/ --include='*.ts' --include='*.js' 2>/dev/null | head -10"
     },
     {
-      "pattern_id": "MISSING_ERROR_HANDLING",
-      "false_positive_scenario": "The async operation uses a Result/Either type pattern instead of try/catch (common in functional programming approaches using neverthrow, fp-ts, or Effect)",
-      "mitigation": "Check if the project uses Result/Either/Effect patterns by searching for imports from neverthrow, fp-ts, effect, or custom Result types. If the return type is Result<T, E> or Either<L, R>, errors are encoded in the return value and do not require try/catch.",
-      "detection_command": "grep -rn 'neverthrow\\|fp-ts\\|@effect\\|Result<\\|Either<\\|ok(\\|err(' src/ 2>/dev/null"
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Apparent open redirect is actually constrained to a whitelist of allowed domains or paths that is validated elsewhere",
+      "mitigation": "Check for redirect URL validation before flagging open redirects. Search for URL whitelist arrays, domain validation functions, or URL parsing that restricts the redirect target to same-origin or a set of allowed domains. If the redirect URL is validated against a whitelist before use, suppress the finding.",
+      "detection_command": "grep -rn 'allowedDomains\\|allowedUrls\\|redirectWhitelist\\|validRedirect\\|safeRedirect\\|isSameOrigin' src/ 2>/dev/null"
     },
     {
-      "pattern_id": "PLAUSIBLE_WRONG_LOGIC",
-      "false_positive_scenario": "Comparison flagged as wrong operator but the code uses a custom comparator or overloaded operator (e.g., dayjs().isBefore() instead of < operator)",
-      "mitigation": "Check whether the comparison involves wrapper types (dayjs, moment, BigNumber, Decimal) that provide their own comparison methods. Raw operator comparisons on wrapper types may be intentionally wrong or intentionally correct depending on the type's valueOf() implementation. Only flag with high confidence when the types are primitives.",
-      "detection_command": "Check the type of the operands being compared"
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Dynamic code execution flagged but used in a controlled context with no user input (e.g., build tools, template engines, code playground environments)",
+      "mitigation": "Dynamic code execution is dangerous when it processes user-controlled strings. However, build tools (webpack plugins, babel transforms), server-side template engines, in-browser code editors (Monaco, CodeMirror), and JSON schema validators may legitimately execute dynamically-constructed code on trusted input. Check whether the input originates from user/network sources or from the application's own trusted code/configuration.",
+      "detection_command": "Trace the data flow into the dynamic execution call: does the input originate from req.body, req.params, user input, or from static configuration/build artifacts"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Sensitive data logged in code that is debug-only or development-only and disabled in production",
+      "mitigation": "Logging sensitive data (tokens, passwords, PII) is a security risk in production but may be acceptable in development/debug modes. Check if the logging is gated behind a debug flag (DEBUG=true, NODE_ENV=development, log level check), a conditional compilation directive, or is in a file that is only loaded in development. If gated, lower severity to informational with a note to verify the gate is effective.",
+      "detection_command": "Check for NODE_ENV/DEBUG conditionals around the logging statement; check if the file is in a debug/ or dev-only/ directory"
+    },
+    {
+      "pattern_id": "SECURITY",
+      "false_positive_scenario": "Password comparison using timing-safe comparison is flagged as incorrect, but the code actually uses a constant-time comparison library or built-in (crypto.timingSafeEqual, bcrypt.compare)",
+      "mitigation": "Timing-safe comparison is critical for password/token verification. bcrypt.compare() is inherently timing-safe because it hashes the candidate before comparing. crypto.timingSafeEqual() is the Node.js built-in constant-time comparison. Do not flag these as insecure comparisons. Only flag direct string equality (===, ==, strcmp) on passwords, tokens, or HMAC digests.",
+      "detection_command": "Check if the comparison uses bcrypt.compare, argon2.verify, crypto.timingSafeEqual, or a constant-time library"
+    },
+
+
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "forEach with async callback when fire-and-forget IS the intended behavior (analytics events, logging, cache warming, background notifications)",
+      "mitigation": "Check whether the async operations inside forEach are side effects whose completion is irrelevant to the caller. If the operations are analytics tracking (track, logEvent, sendAnalytics), logging (logger.info, console.log), cache warming (cache.set, prefetch), or notification dispatch (sendEmail, pushNotification) where the caller does not need the result and failure is non-critical, the forEach-with-async pattern is acceptable. Also check for a comment indicating fire-and-forget intent.",
+      "detection_command": "Check the function names called inside forEach for analytics/logging/cache/notification keywords; check for void operator or fire-and-forget comments"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Sequential awaits flagged as inefficient but operations have ordering dependencies that require sequential execution",
+      "mitigation": "Before flagging sequential awaits as parallelizable, check whether later operations depend on results from earlier ones. Patterns like 'const user = await getUser(); const orders = await getOrders(user.id);' MUST be sequential because getOrders depends on user.id. Only flag sequential awaits when the operations are provably independent (no data flows from one result into the next call's arguments).",
+      "detection_command": "Check whether variables assigned from earlier awaits are referenced in later await expressions"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Missing await on a function call when the function is intentionally used to create a deferred Promise for later resolution",
+      "mitigation": "Check if the unawaited promise is assigned to a variable that is later awaited, passed to Promise.all/race/allSettled, or stored for deferred execution (e.g., in a queue, batch array, or promise pool). Patterns like 'const p = fetchData(); ... await p;' or 'promises.push(fetchData())' are correct deferred execution. Only flag missing await when the promise is neither stored nor awaited anywhere in the function scope.",
+      "detection_command": "Check if the returned promise is assigned to a variable; search the rest of the function for await on that variable or inclusion in Promise.all/allSettled"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Async function without await is intentional because it wraps synchronous code that may throw, using the async keyword to guarantee a rejected promise instead of a thrown exception",
+      "mitigation": "An async function with no await is sometimes used deliberately to ensure that synchronous throws are converted to promise rejections, keeping error handling consistent in a promise-based call chain. Check if the function contains code that may throw (JSON.parse, type assertions, validation) and is called in a context that handles rejections (.catch or try/await). If so, the async keyword is intentional.",
+      "detection_command": "Check the function body for synchronous operations that may throw; check call sites for .catch() or try/catch with await"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Promise.all flagged as dangerous but the code is intentionally using fail-fast behavior where any rejection should abort all operations",
+      "mitigation": "Promise.all rejects immediately when any input promise rejects. This is the correct choice when the caller wants fail-fast semantics (e.g., loading all required resources where partial success is useless). Only suggest Promise.allSettled when the caller needs partial results or must process each outcome independently. Check the error handling around the Promise.all call to determine intent.",
+      "detection_command": "Check for try/catch around Promise.all and whether the catch handler aborts the entire operation"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Top-level await flagged as an error but the file is an ES module (type: module) or a script/entry point where top-level await is valid",
+      "mitigation": "Top-level await is valid in ES modules (files with .mjs extension, or .js/.ts files in a project with 'type': 'module' in package.json, or files with module-level tsconfig target). Check the module system before flagging. Also check if the file is a script, seed file, migration, or CLI entry point where top-level await is common and correct.",
+      "detection_command": "grep '\"type\".*\"module\"' package.json 2>/dev/null; check file extension for .mjs/.mts"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Callback-style API (event emitters, streams, framework hooks) flagged as missing await but the API does not return a promise",
+      "mitigation": "Not all asynchronous patterns use promises. Node.js EventEmitters (.on, .once, .emit), stream callbacks (.pipe, .on('data')), Express middleware (next()), and certain framework hooks (Vue lifecycle, React useEffect cleanup) use callback patterns that do not return promises and cannot be awaited. Verify the API's return type before flagging missing await.",
+      "detection_command": "Check the function signature or documentation of the called API to confirm it returns a Promise"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Race condition flagged in state update but the code uses a reducer, state machine, or queue that serializes updates",
+      "mitigation": "Race conditions in state updates are real when multiple async operations write to shared mutable state concurrently. However, if the code uses useReducer (React), a state machine library (XState, Robot), a mutex/semaphore, or a serial queue for state updates, concurrent operations are serialized and safe. Check for state management patterns that serialize concurrent access.",
+      "detection_command": "grep -rn 'useReducer\\|createMachine\\|Mutex\\|Semaphore\\|queue\\|serialize' <file> 2>/dev/null"
+    },
+    {
+      "pattern_id": "ASYNC_MISTAKES",
+      "false_positive_scenario": "Async generator or async iterator usage flagged as unhandled, but it is consumed by a for-await-of loop elsewhere",
+      "mitigation": "Async generators (async function*) and async iterators return objects that must be consumed with for-await-of or manual .next() calls. The generator creation site may appear to have an unhandled async value, but the consumption happens at the call site. Search for for-await-of loops or .next() calls that consume the generator before flagging.",
+      "detection_command": "grep -rn 'for await\\|.next()' <file> 2>/dev/null; search for usage of the generator function"
+    },
+
+
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Hook appears to be called conditionally but is actually inside a component that uses early return for guard clauses (redirect, loading, error states)",
+      "mitigation": "React's rules of hooks require hooks to be called unconditionally at the top level. However, a common pattern is: 'if (!user) return <Redirect />;' AFTER all hooks have been called. Check whether ALL hook calls appear BEFORE any early return. If hooks are above the conditional return, the code is valid. Only flag when a hook call appears AFTER a conditional return or inside an if/else block.",
+      "detection_command": "Parse the component function to verify the ordering: all useX() calls should appear before any return statement that is not the final render return"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Missing useEffect dependency that is actually a stable reference (dispatch from useReducer, ref from useRef, setState from useState, functions from context that are guaranteed stable)",
+      "mitigation": "React guarantees that certain values are stable across renders and do not need to be listed in useEffect dependency arrays: setState functions from useState, dispatch from useReducer, ref objects from useRef, and stable context values. The official ESLint plugin (react-hooks/exhaustive-deps) also excludes these. Do not flag missing dependencies for: setState, dispatch, ref, and functions documented as stable by their library (e.g., navigate from react-router, queryClient methods from react-query).",
+      "detection_command": "Check if the 'missing' dependency was returned from useState (setter), useReducer (dispatch), useRef, or is documented as stable by the library"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Server Component appears to use hooks but the imports are type-only (import type) and the hook references are in type annotations, not runtime calls",
+      "mitigation": "TypeScript 'import type' statements are erased at compile time and do not count as runtime usage. A Server Component may import types that reference hook names (e.g., 'import type { UseQueryResult } from ...') without violating Server Component rules. Only flag actual function CALLS to hooks (useState(), useEffect(), etc.), not type-level references.",
+      "detection_command": "Check whether hook references appear in 'import type' statements or type annotations vs actual function call expressions"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Component function that appears to conditionally call hooks is actually two separate components (inner component defined inside a condition or map callback)",
+      "mitigation": "A function component defined inside a map, filter, or conditional block is a separate component with its own hook scope. Hooks called inside that inner component are not conditional relative to the outer component. Verify whether the hook call is in the outer component's body or in a nested component function before flagging.",
+      "detection_command": "Check for function/arrow function declarations between the conditional and the hook call that define a new component scope"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Custom hook name does not start with 'use' but is a valid non-hook function that internally uses hooks and is called from a component",
+      "mitigation": "React's rules of hooks only apply to functions whose names start with 'use' (convention) and to component functions. A helper function like 'fetchAndSetUser()' that calls hooks internally is technically violating the naming convention but may still work correctly if only called from component render scope. Flag the naming violation separately (LOW severity) rather than claiming the hooks are called incorrectly.",
+      "detection_command": "Check if the function is only called from component-level code and whether renaming to useXxx would be the correct fix"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "useEffect with empty dependency array flagged as missing dependencies, but the effect intentionally runs only once on mount (event listener setup, one-time initialization)",
+      "mitigation": "An empty dependency array [] on useEffect means 'run once on mount, clean up on unmount.' This is correct for one-time setup like adding a window event listener, initializing a third-party library, or setting up a WebSocket connection. Only flag empty arrays when the effect body reads reactive values (props, state) that could change and the effect would need to re-run to stay in sync.",
+      "detection_command": "Check the effect body for references to props or state values that may change after mount"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "setState called in render flagged as causing infinite loop, but it is inside a condition that prevents re-triggering (derived state pattern)",
+      "mitigation": "Calling setState during render is a recognized React pattern for derived state that avoids an extra render cycle (recommended in React docs as an alternative to useEffect for derived state). The pattern is: 'if (prevValue !== currentValue) { setState(newDerived); }'. This is safe because the condition prevents infinite loops. Only flag unconditional setState in render.",
+      "detection_command": "Check whether the setState call is guarded by a condition comparing previous and current values"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Component re-renders flagged as performance issue but the component is small and re-rendering is cheaper than memoization overhead",
+      "mitigation": "React.memo, useMemo, and useCallback have costs: additional memory for cached values, comparison overhead on every render, and code complexity. For small components that render quickly (simple display components, text, icons), the memoization overhead may exceed the re-render cost. Do not flag missing memoization unless the component is demonstrably expensive (large lists, heavy computation, frequent re-renders visible in profiling).",
+      "detection_command": "Check the component's complexity: does it render a list, perform computation, or is it a simple display component"
+    },
+    {
+      "pattern_id": "REACT_MISTAKES",
+      "false_positive_scenario": "Unsafe inner HTML rendering flagged as XSS but the HTML content is from a trusted source (CMS, markdown rendered server-side, sanitized HTML)",
+      "mitigation": "Rendering raw HTML is a valid React pattern for rendering trusted HTML content. If the content comes from a CMS (Contentful, Sanity, Strapi), is rendered from markdown (remark, marked with sanitization), or has been explicitly sanitized (DOMPurify, sanitize-html, isomorphic-dompurify), the usage is safe. Check the data source and whether sanitization is applied before insertion.",
+      "detection_command": "Trace the HTML content source: check for CMS fetches, markdown rendering pipelines, or sanitize/DOMPurify calls on the content before rendering"
+    },
+
+
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "getServerSideProps, getStaticProps, or getStaticPaths used in the pages/ directory, which is the correct location for these APIs",
+      "mitigation": "These data-fetching functions are the CORRECT pattern in Next.js Pages Router (pages/ directory). They are only invalid in the App Router (app/ directory). Before flagging, check whether the file is under pages/ or app/. If under pages/, these exports are correct and expected. Only flag them if found in app/ directory files.",
+      "detection_command": "Check the file path: if it matches pages/**/*.tsx or pages/**/*.ts, these functions are valid"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "useRouter imported from next/router in a pages/ directory file, which is the correct import for Pages Router",
+      "mitigation": "Next.js has two router packages: next/router (Pages Router) and next/navigation (App Router). Using next/router in pages/ is correct. Using next/navigation in app/ is correct. Only flag cross-contamination: next/router in app/ directory files, or next/navigation in pages/ directory files. If both pages/ and app/ directories exist (migration), check which directory the current file belongs to.",
+      "detection_command": "Check the file path against pages/ vs app/ and verify the import matches the correct router package for that directory"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Synchronous cookies(), headers(), or draftMode() call in Next.js 14 or earlier, where these APIs are synchronous (only async in Next.js 15+)",
+      "mitigation": "In Next.js 14 and earlier, cookies(), headers(), and draftMode() are synchronous and return their values directly. They only became async (returning Promises) in Next.js 15+. Check the installed Next.js version before flagging a missing await. Read node_modules/next/package.json for the exact version. If < 15, synchronous usage is correct.",
+      "detection_command": "grep '\"version\"' node_modules/next/package.json 2>/dev/null; compare major version against 15"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "File in app/ directory without 'use client' directive flagged as incorrect, but it is a valid Server Component that does not need the directive",
+      "mitigation": "In Next.js App Router, components are Server Components by default. The 'use client' directive is only needed for Client Components that use browser APIs, hooks (useState, useEffect, etc.), or event handlers. A component in app/ without 'use client' that only renders static content, fetches data with async/await, or composes other server components is correct. Do not flag the absence of 'use client' as an error.",
+      "detection_command": "Check whether the component uses any client-only APIs (useState, useEffect, onClick, window, document) that would require 'use client'"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Dynamic route parameter accessed via props in a page component, which is the correct App Router pattern (not useRouter or useParams)",
+      "mitigation": "In Next.js App Router, page components receive params as props: 'export default function Page({ params }) { ... }'. This is different from Pages Router where params come from useRouter().query. Do not flag prop-based param access in app/ directory page components. It is the correct pattern for both Server and Client Components in App Router.",
+      "detection_command": "Check whether the file is app/**/page.tsx and accesses params via function props"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Next.js API route in pages/api/ using req/res pattern, which is correct for Pages Router API routes (not App Router route handlers)",
+      "mitigation": "Pages Router API routes (pages/api/**) use the Express-like (req, res) handler signature with res.status().json(). App Router route handlers (app/**/route.ts) use Web API Request/Response objects. Do not flag the (req, res) pattern in pages/api/ files. Only flag it in app/ directory route.ts files.",
+      "detection_command": "Check whether the file path is under pages/api/ (correct for req/res) or app/ (should use Request/Response)"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Image component import from next/image flagged, but the project uses Next.js 12 or earlier where the legacy image component is the default",
+      "mitigation": "In Next.js 12 and earlier, 'next/image' exports the component that was later moved to 'next/legacy/image' in v13. The 'optimized' image component became the default in v13. Check the installed Next.js version before flagging Image import paths. If v12 or earlier, next/image is the correct import even though its behavior differs from v13+ next/image.",
+      "detection_command": "grep '\"version\"' node_modules/next/package.json 2>/dev/null"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Client Component importing a module that appears server-only but is actually isomorphic (works in both browser and server)",
+      "mitigation": "Some modules work in both browser and server environments despite appearing server-only by name: crypto (via Web Crypto API in browsers), fetch (native in modern browsers), URL (global in browsers), Buffer (via polyfill in bundler). Only flag imports of modules that are genuinely server-only: fs, child_process, net, dns, worker_threads, database drivers (pg, mysql2, mongodb native), server-specific SDKs. Check if the module has a browser-compatible build.",
+      "detection_command": "Check node_modules/<module>/package.json for 'browser' or 'exports' fields with browser conditions"
+    },
+    {
+      "pattern_id": "NEXTJS_MISTAKES",
+      "false_positive_scenario": "Middleware using Node.js APIs flagged as incorrect, but the project uses Next.js with a custom server or non-Edge runtime",
+      "mitigation": "Next.js middleware runs in the Edge Runtime by default, which does not support all Node.js APIs. However, if the project configures a custom server (server.js/server.ts with createServer) or explicitly sets the middleware runtime to 'nodejs' via export const config = { runtime: 'nodejs' }, Node.js APIs are available. Check the middleware's runtime configuration before flagging.",
+      "detection_command": "grep -n 'runtime.*nodejs\\|runtime.*node' middleware.ts middleware.js next.config.* 2>/dev/null"
+    },
+
+
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "N+1 query pattern that is actually batched by a DataLoader or equivalent batching layer",
+      "mitigation": "DataLoader (facebook/dataloader) and similar batching utilities (e.g., Prisma's findMany with in-clause batching, GraphQL field resolvers with dataloaders) automatically collect individual load calls within a single tick and batch them into one query. If the project uses DataLoader, a GraphQL resolver pattern with context.loaders, or Prisma's built-in batching, individual .load() or .findUnique() calls inside a loop are NOT N+1 queries. Check for DataLoader instantiation and usage patterns.",
+      "detection_command": "grep -rn 'DataLoader\\|dataloader\\|createLoader\\|context.loaders\\|ctx.loaders' src/ 2>/dev/null; grep -rn 'new DataLoader' src/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "SQL injection flagged but the query uses a tagged template literal (Prisma.sql``, sql``, postgres``) that auto-parameterizes interpolated values",
+      "mitigation": "Tagged template literals in SQL libraries are NOT string interpolation. Libraries like slonik (sql``), postgres (sql``), Prisma (Prisma.sql``), and pg-template-tag process the template literal at the tag function level, extracting interpolated values as parameterized query arguments. The resulting query uses $1, $2, etc. placeholders. Only flag: (1) untagged template literals used directly in query(), (2) string concatenation with +, (3) String.raw or manual template literal construction.",
+      "detection_command": "Check if the template literal has a tag function (identifier immediately before the backtick): sql`...`, Prisma.sql`...`, postgres`...`. Untagged: `SELECT * FROM ${table}` (no tag before backtick)"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "Missing transaction flagged but the operations are idempotent and safe to partially complete",
+      "mitigation": "Transactions are critical when operations must be atomic (all-or-nothing). However, if each operation in the sequence is idempotent (can be safely retried or partially applied), a transaction may be unnecessary. Examples of idempotent operations: upserts (INSERT ON CONFLICT UPDATE), setting a status to a fixed value, incrementing a counter that is recalculated, cache writes. Check whether partial completion would leave the system in an inconsistent state. If not, suppress the finding.",
+      "detection_command": "Check whether the database operations use upsert/ON CONFLICT, whether they are independent writes to separate tables with no foreign key dependencies, and whether the surrounding code has retry logic"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "N+1 query flagged in a CLI tool, migration script, seed file, or admin script where performance is not a concern",
+      "mitigation": "N+1 queries are a performance concern for request-handling code under load. In scripts that run once (migrations, seeds, CLI tools, admin tasks, cron jobs processing small batches), the N+1 pattern may be acceptable because code clarity is more important than query count. Check the file path and execution context. If the file is in scripts/, migrations/, seeds/, cli/, or tools/, lower severity to informational.",
+      "detection_command": "Check if the file path contains 'script', 'migration', 'seed', 'cli', 'tool', 'admin', or 'cron'"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "Missing connection pool configuration flagged but the application uses a managed database service or serverless database proxy that handles pooling",
+      "mitigation": "Managed database services (AWS RDS Proxy, PlanetScale, Neon, Supabase) and serverless database drivers (Prisma Accelerate, @neondatabase/serverless, @planetscale/database) handle connection pooling at the infrastructure level. If the project uses one of these services, application-level pool configuration may be unnecessary or even counterproductive. Check for managed database connection strings (*.neon.tech, *.supabase.co) or serverless database driver imports.",
+      "detection_command": "grep -rn 'neon\\|supabase\\|planetscale\\|rds-proxy\\|Accelerate\\|@neondatabase/serverless' .env* prisma/schema.prisma src/ 2>/dev/null"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "Raw SQL flagged as unsafe but used in a database migration file where parameterization is not applicable (DDL statements, schema changes)",
+      "mitigation": "Database migrations contain DDL statements (CREATE TABLE, ALTER TABLE, CREATE INDEX, etc.) that define schema structure. These statements use static SQL that cannot be parameterized and do not process user input. Raw SQL in migration files is expected and correct. Only flag raw SQL in migration files if it contains interpolated runtime variables, which would indicate a dynamic migration anti-pattern.",
+      "detection_command": "Check if the file path contains 'migration', 'migrate', or is under a migrations/ directory; check if the SQL is DDL (CREATE, ALTER, DROP) vs DML (SELECT, INSERT, UPDATE, DELETE)"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "Query inside a loop flagged as N+1 but the loop has a fixed small number of iterations (e.g., processing a known set of 3 status types)",
+      "mitigation": "N+1 is a scalability problem when N grows with data volume. If the loop iterates over a fixed, small set (enum values, known configuration items, a constant array), the number of queries is bounded and predictable. A loop running 3 queries for 3 status types is O(1) not O(N). Check whether the loop's iteration count is data-dependent (user count, order count) or fixed (enum, config).",
+      "detection_command": "Check the loop's data source: is it a database result set (data-dependent) or a hardcoded array/enum (fixed)"
+    },
+    {
+      "pattern_id": "DATABASE_MISTAKES",
+      "false_positive_scenario": "Unbatched insert flagged but the ORM automatically batches operations (e.g., Prisma createMany, Sequelize bulkCreate, or Django bulk_create)",
+      "mitigation": "Some ORMs provide batch/bulk operations that handle multiple records efficiently. Prisma's createMany, Sequelize's bulkCreate, Django's bulk_create, and SQLAlchemy's bulk_save_objects all handle batching internally. If the code uses these bulk APIs, individual record creation inside the loop is not happening; the ORM batches them. Check for bulk API usage around the flagged code.",
+      "detection_command": "grep -n 'createMany\\|bulkCreate\\|bulk_create\\|bulk_save\\|insertMany' <file> 2>/dev/null"
+    },
+
+
+    {
+      "pattern_id": "CONFIDENT_WRONG_TYPES",
+      "false_positive_scenario": "Type assertion (as) used on a value that has been validated at runtime by a type guard, schema validator, or assertion function",
+      "mitigation": "Type assertions after runtime validation are safe. Check if the value was validated before the assertion using: Zod .parse()/.safeParse(), Yup .validate(), io-ts decode, a custom type guard (function isX(val): val is X), or an assertion function (function assertX(val): asserts val is X). If validated, the type assertion narrows a known-good value and is not unsafe.",
+      "detection_command": "Check the preceding lines for .parse(), .safeParse(), .validate(), type guard calls, or assertion function calls on the same variable"
+    },
+    {
+      "pattern_id": "CONFIDENT_WRONG_TYPES",
+      "false_positive_scenario": "Non-null assertion (!) used on a value that is guaranteed non-null by control flow (after a null check, after .find() with a preceding .some(), after Map.has())",
+      "mitigation": "TypeScript's control flow analysis sometimes cannot narrow types across function boundaries or after certain patterns. Using ! after document.getElementById when the element is known to exist (e.g., rendering into a guaranteed DOM node), or after map.get() when map.has() was checked, is a common and acceptable pattern. Check whether the non-null assertion is preceded by a guard that ensures the value exists.",
+      "detection_command": "Check the preceding lines for null/undefined checks, .has() calls, .includes() calls, or other guards that guarantee existence"
+    },
+    {
+      "pattern_id": "CONFIDENT_WRONG_TYPES",
+      "false_positive_scenario": "Type assertion used in test code to create mock objects or partial implementations that do not satisfy the full type",
+      "mitigation": "Test code frequently uses partial mocks and type assertions to create test doubles: 'const mockService = { getUser: vi.fn() } as unknown as UserService'. This is a standard testing pattern that avoids implementing every method of a complex interface. Do not flag type assertions in test files (*.test.ts, *.spec.ts, __tests__/) unless they are testing the type system itself.",
+      "detection_command": "Check if the file path contains 'test', 'spec', or '__tests__'"
+    },
+
+
+    {
+      "pattern_id": "API_MISTAKES",
+      "false_positive_scenario": "Missing pagination flagged but the endpoint returns a bounded dataset that will never grow beyond a reasonable size",
+      "mitigation": "Pagination is necessary for unbounded collections (users, orders, logs). But some endpoints return inherently bounded data: enum values, configuration options, user roles, country lists, or dashboard summary data with a fixed number of items. If the dataset has a natural upper bound that is small (under ~100 items) and will not grow with usage, pagination is unnecessary. Check the data source to determine if the collection is bounded.",
+      "detection_command": "Check the data source of the endpoint: is it an enum, config, or bounded reference table vs a growing user-data table"
+    },
+    {
+      "pattern_id": "API_MISTAKES",
+      "false_positive_scenario": "Missing rate limiting flagged but the endpoint is internal (service-to-service) with no public exposure",
+      "mitigation": "Rate limiting is critical for public-facing endpoints to prevent abuse. Internal service-to-service APIs behind a private network or VPC may not need application-level rate limiting if the callers are trusted internal services with controlled concurrency. Check whether the API is exposed publicly (via ingress, load balancer, or public DNS) or is internal-only (private subnet, service mesh, localhost binding).",
+      "detection_command": "Check the server binding (0.0.0.0 vs 127.0.0.1), ingress configuration, and whether the API has public routes"
+    },
+    {
+      "pattern_id": "API_MISTAKES",
+      "false_positive_scenario": "HTTP status code flagged as incorrect but the API follows a domain-specific convention or legacy contract",
+      "mitigation": "Some APIs intentionally deviate from strict HTTP semantics for legacy compatibility or domain-specific reasons. For example, some APIs return 200 with an error body for all responses (common in SOAP-derived APIs, some payment gateways). If the project has an established pattern of using specific status codes consistently (visible in other routes), do not flag individual routes for deviating from HTTP best practices unless they deviate from the project's own convention.",
+      "detection_command": "Sample other route handlers in the same file or directory to determine the project's status code convention"
     }
   ]
 }
