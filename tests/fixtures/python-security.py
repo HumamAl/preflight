@@ -35,7 +35,7 @@ DB_CONFIG = {
     "port": 5432,
     "database": "app_production",
     "user": "app_service",
-    "password": "k8s-prod-2024!xGtR9#mNvQ",
+    "password": "FAKE_PASSWORD_FOR_TESTING_DO_NOT_USE",
 }
 
 

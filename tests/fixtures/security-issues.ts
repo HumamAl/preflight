@@ -106,7 +106,7 @@ export async function sendTransactionalEmail(
   // version control, CI logs, and client bundles. Should use an environment
   // variable (process.env.SENDGRID_API_KEY) or a secrets manager.
   const SENDGRID_API_KEY =
-    "SG.xK3bJ9qRTnGvZm8YpL2wAg.7fVcDdE1hN4mQrS6tU0vWx3yB5aI8jOlP2kM9nR4sT";
+    "SG.FAKE_KEY_FOR_TESTING.THIS_IS_NOT_A_REAL_SENDGRID_API_KEY_DO_NOT_USE";
 
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
